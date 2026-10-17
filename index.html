@@ -315,6 +315,28 @@ textarea.input { resize: vertical; }
 .effort-row.on .row-main span { color: var(--acc); }
 .done-circle { width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--label-3); color: transparent; display: grid; place-items: center; transition: background var(--fast), border-color var(--fast); justify-self: center; }
 .done-circle.on { background: var(--green); border-color: var(--green); color: #000; }
+/* Narrow phones (folded Galaxy Z Fold cover screens are ~344px): slimmer controls so the
+   numbers always have room. Columns: set no · weight · reps · effort · done. */
+@media (max-width: 420px) {
+  .sets-box { padding: 8px 6px 4px; border-radius: var(--r-lg); }
+  .set-row { grid-template-columns: 28px minmax(0, 1.25fr) minmax(0, 1fr) 46px 36px; gap: 4px; padding: 4px 0; }
+  .set-row.no-effort { grid-template-columns: 28px minmax(0, 1.25fr) minmax(0, 1fr) 36px; }
+  .set-num { width: 28px; height: 28px; font-size: .85rem; }
+  .stepper, .bw-add, .effort-btn { height: 42px; }
+  .step-btn { width: 22px; font-size: 1.2rem; }
+  .step-input { font-size: 1.02rem; }
+  .effort-btn { font-size: .74rem; }
+  .done-circle { width: 36px; height: 36px; }
+  .set-meta { padding-left: 32px; }
+}
+@media (max-width: 340px) {
+  .main { padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+  .step-btn { width: 18px; }
+  .set-row { grid-template-columns: 26px minmax(0, 1.25fr) minmax(0, 1fr) 42px 34px; gap: 3px; }
+  .set-row.no-effort { grid-template-columns: 26px minmax(0, 1.25fr) minmax(0, 1fr) 34px; }
+  .effort-btn { font-size: .68rem; }
+  .done-circle { width: 34px; height: 34px; }
+}
 .set-meta { display: flex; gap: 10px; align-items: center; font-size: .78rem; color: var(--label-2); padding: 0 0 4px 42px; flex-wrap: wrap; }
 .set-meta .ic { vertical-align: -2px; }
 .pr { background: var(--yellow); color: #000; font-weight: 700; border-radius: 5px; padding: 1px 6px; font-size: .72rem; }
