@@ -3,7 +3,14 @@
 import { KJ_PER_KCAL } from './nutrition.js'
 
 const API = 'https://world.openfoodfacts.org'
-const SEARCH_ALT = 'https://search.openfoodfacts.org/search'
+// Open Food Facts asks apps to identify themselves. Browsers won't let a page set User-Agent,
+// so this goes in X-User-Agent, which their CORS setup allows.
+export const APP_ID = 'PowerLevel/1.0 (https://github.com/zimboking/power-level)'
+// Busy servers answer 503 without CORS headers, which the browser reports as a network error,
+// so a failed request gets one more try after a short pause.
+const RETRY_AFTER_MS = 3000
+const RETRYABLE = new Set(['network', 'down', 'busy'])
+const wait = ms => new Promise(r => setTimeout(r, ms))
 const FIELDS = 'code,product_name,product_name_en,generic_name,brands,quantity,serving_size,serving_quantity,nutriments'
 
 export class OffError extends Error {
@@ -40,51 +47,48 @@ export function productToFood(product) {
   }
 }
 
-async function getJson(url, fetchImpl) {
+async function getJsonOnce(url, fetchImpl) {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new OffError('offline', 'You’re offline. Open Food Facts needs a connection.')
   let res
-  try { res = await fetchImpl(url, { headers: { Accept: 'application/json' } }) } catch { throw new OffError('network', 'Couldn’t reach Open Food Facts. Check your connection and try again.') }
-  if (res.status === 429) throw new OffError('busy', 'Open Food Facts is busy. Wait a minute and try again.')
+  try { res = await fetchImpl(url, { headers: { Accept: 'application/json', 'X-User-Agent': APP_ID } }) } catch { throw new OffError('network', 'Couldn’t reach Open Food Facts. Check your connection and try again.') }
+  if (res.status === 429 || res.status === 503) throw new OffError('busy', 'Open Food Facts is busy. Wait a minute and try again.')
   if (!res.ok) throw new OffError('down', `Open Food Facts didn’t answer (error ${res.status}).`)
   try { return await res.json() } catch { throw new OffError('down', 'Open Food Facts sent something unexpected.') }
+}
+
+async function getJson(url, { fetchImpl = fetch, retryAfterMs = RETRY_AFTER_MS } = {}) {
+  try { return await getJsonOnce(url, fetchImpl) } catch (err) {
+    if (!RETRYABLE.has(err.kind)) throw err
+    await wait(retryAfterMs)
+    return getJsonOnce(url, fetchImpl)
+  }
 }
 
 export const cleanBarcode = s => String(s || '').replace(/\D/g, '')
 export const validBarcode = s => /^\d{8,14}$/.test(cleanBarcode(s))
 
 // Resolves to a food, or null when the product isn't in Open Food Facts.
-export async function lookupBarcode(code, fetchImpl = fetch) {
+// opts: { fetchImpl, retryAfterMs } (for tests).
+export async function lookupBarcode(code, opts) {
   const bc = cleanBarcode(code)
   if (!validBarcode(bc)) throw new OffError('bad', 'That doesn’t look like a barcode (8 to 14 digits).')
-  const data = await getJson(`${API}/api/v2/product/${bc}.json?fields=${FIELDS}`, fetchImpl)
+  const data = await getJson(`${API}/api/v2/product/${bc}.json?fields=${FIELDS}`, opts)
   if (data.status !== 1 || !data.product) return null
   return productToFood({ ...data.product, code: data.product.code || bc })
 }
 
-// Name search. Open Food Facts rate-limits search (about 10 a minute), so callers debounce,
-// and results are cached for the session. Tries the classic endpoint, then the newer one.
+// Name search. Open Food Facts allows about 10 searches a minute and asks apps not to search
+// as you type, so the UI only searches when you press the button. Results are cached for the
+// session. (search.openfoodfacts.org sends no CORS headers, so a web page can't use it.)
 const searchCache = new Map()
-export async function searchProducts(q, fetchImpl = fetch) {
+export async function searchProducts(q, opts) {
   const term = String(q || '').trim().toLowerCase()
   if (term.length < 3) return []
   if (searchCache.has(term)) return searchCache.get(term)
-  const urls = [
-    `${API}/cgi/search.pl?search_terms=${encodeURIComponent(term)}&search_simple=1&action=process&json=1&page_size=12&fields=${FIELDS}`,
-    `${SEARCH_ALT}?q=${encodeURIComponent(term)}&page_size=12&fields=${FIELDS}`,
-  ]
-  let lastErr
-  for (const url of urls) {
-    try {
-      const data = await getJson(url, fetchImpl)
-      const list = (data.products || data.hits || []).map(productToFood).filter(f => f && f.complete)
-      searchCache.set(term, list)
-      return list
-    } catch (err) {
-      if (err.kind === 'offline') throw err
-      lastErr = err
-    }
-  }
-  throw lastErr
+  const data = await getJson(`${API}/cgi/search.pl?search_terms=${encodeURIComponent(term)}&search_simple=1&action=process&json=1&page_size=12&fields=${FIELDS}`, opts)
+  const list = (data.products || []).map(productToFood).filter(f => f && f.complete)
+  searchCache.set(term, list)
+  return list
 }
 
 // Per-serving macros from a per-100 g food.

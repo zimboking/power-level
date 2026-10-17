@@ -6,7 +6,7 @@ import { deflateRawSync } from 'node:zlib'
 import { convertRows, kjToKcal } from '../tools/build-foods.mjs'
 import { readXlsx, colIndex } from '../tools/xlsx.mjs'
 import { rankFoods, afcdFood, ESTIMATES, sourceOf, words } from '../js/foods.js'
-import { productToFood, lookupBarcode, searchProducts, perServing, validBarcode } from '../js/off.js'
+import { productToFood, lookupBarcode, searchProducts, perServing, validBarcode, APP_ID } from '../js/off.js'
 
 const AFCD = JSON.parse(readFileSync(new URL('../js/data/foods.json', import.meta.url), 'utf8')).map(afcdFood)
 const top = (q, lists = [[], AFCD, ESTIMATES], n = 1) => rankFoods(q, lists, n).map(f => f.name)
@@ -138,28 +138,46 @@ test('OFF product with missing macros is flagged incomplete', () => {
 
 const res = (status, body) => Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) })
 
+const opts = fetchImpl => ({ fetchImpl, retryAfterMs: 0 })
+
 test('barcode lookup: found, not found, bad input, network failure', async () => {
-  const urls = []
-  const found = await lookupBarcode('9300 6336 03024', url => { urls.push(url); return res(200, { status: 1, product: PRODUCT }) })
+  const calls = []
+  const found = await lookupBarcode('9300 6336 03024', opts((url, init) => { calls.push([url, init]); return res(200, { status: 1, product: PRODUCT }) }))
   assert.equal(found.ref, '9300633603024')
-  assert.match(urls[0], /\/api\/v2\/product\/9300633603024\.json\?fields=/)
-  assert.equal(await lookupBarcode('9300633603024', () => res(200, { status: 0 })), null)
-  await assert.rejects(lookupBarcode('123', () => res(200, {})), e => e.kind === 'bad')
-  await assert.rejects(lookupBarcode('9300633603024', () => Promise.reject(new TypeError('Failed to fetch'))), e => e.kind === 'network')
-  await assert.rejects(lookupBarcode('9300633603024', () => res(429, {})), e => e.kind === 'busy')
+  assert.match(calls[0][0], /\/api\/v2\/product\/9300633603024\.json\?fields=/)
+  assert.equal(calls[0][1].headers['X-User-Agent'], APP_ID)
+  assert.match(APP_ID, /^PowerLevel\/[\d.]+ \(.+\)$/)
+  assert.equal(await lookupBarcode('9300633603024', opts(() => res(200, { status: 0 }))), null)
+  await assert.rejects(lookupBarcode('123', opts(() => res(200, {}))), e => e.kind === 'bad')
+  await assert.rejects(lookupBarcode('9300633603024', opts(() => Promise.reject(new TypeError('Failed to fetch')))), e => e.kind === 'network')
+  await assert.rejects(lookupBarcode('9300633603024', opts(() => res(503, {}))), e => e.kind === 'busy')
   assert.ok(validBarcode('12345678') && !validBarcode('1234567'))
 })
 
-test('name search falls back to the second endpoint and keeps only complete products', async () => {
-  let calls = 0
-  const list = await searchProducts('tim tams', url => {
-    calls++
-    if (url.includes('search.pl')) return res(503, {})
-    return res(200, { hits: [{ ...PRODUCT, brands: ['Arnott’s'], product_name: 'Tim Tam' }, { code: '2', product_name: 'No data', nutriments: {} }] })
-  })
-  assert.equal(calls, 2)
+test('a failed request is retried once, then gives up', async () => {
+  let n = 0
+  const flaky = () => (++n === 1 ? Promise.reject(new TypeError('Failed to fetch')) : res(200, { status: 1, product: PRODUCT }))
+  assert.equal((await lookupBarcode('9300633603024', opts(flaky))).ref, '9300633603024')
+  assert.equal(n, 2)
+  let m = 0
+  await assert.rejects(lookupBarcode('9300633603024', opts(() => { m++; return res(503, {}) })), e => e.kind === 'busy')
+  assert.equal(m, 2)
+  // A "not a barcode" mistake isn't retried.
+  let k = 0
+  await assert.rejects(lookupBarcode('12', opts(() => { k++ })), e => e.kind === 'bad')
+  assert.equal(k, 0)
+})
+
+test('name search uses the classic endpoint and keeps only complete products', async () => {
+  const urls = []
+  const list = await searchProducts('tim tams', opts(url => {
+    urls.push(url)
+    return res(200, { products: [{ ...PRODUCT, brands: 'Arnott’s', product_name: 'Tim Tam' }, { code: '2', product_name: 'No data', nutriments: {} }] })
+  }))
+  assert.equal(urls.length, 1)
+  assert.match(urls[0], /\/cgi\/search\.pl\?search_terms=tim%20tams&/)
   assert.deepEqual(list.map(f => f.name), ['Arnott’s Tim Tam'])
   // Cached: no further calls for the same term.
-  await searchProducts('Tim Tams ', () => { throw new Error('should be cached') })
-  assert.deepEqual(await searchProducts('ab', () => { throw new Error('too short') }), [])
+  await searchProducts('Tim Tams ', opts(() => { throw new Error('should be cached') }))
+  assert.deepEqual(await searchProducts('ab', opts(() => { throw new Error('too short') })), [])
 })

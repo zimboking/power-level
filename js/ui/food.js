@@ -17,7 +17,6 @@ export function dailyTargets(profile) {
 }
 
 const UNIT_OPTS = Object.entries(ENERGY_UNITS).map(([value, label]) => ({ value, label }))
-const OFF_DEBOUNCE_MS = 900
 const NUM_KEYS = [['kcal', null], ['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g']]
 
 // Where a food's numbers came from, shown on every result.
@@ -62,26 +61,27 @@ function PackagedFoods({ unit, onPick }) {
       else setState({ busy: false, msg: 'That barcode isn’t in Open Food Facts yet. Use Quick add with the label’s numbers.', list: [] })
     } catch (err) { setState({ busy: false, msg: err.message, list: [] }) }
   }
-  useEffect(() => {
+  // Searches only on the button: Open Food Facts limits searches and asks apps not to search as you type.
+  const search = async () => {
     const term = q.trim()
-    if (term.length < 3) return
-    const t = setTimeout(async () => {
-      setState({ busy: true, msg: '', list: [] })
-      try {
-        const list = await searchProducts(term)
-        setState({ busy: false, msg: list.length ? '' : 'No products with full nutrition info found. Try the barcode instead.', list })
-      } catch (err) { setState({ busy: false, msg: err.kind === 'offline' ? err.message : 'Open Food Facts search isn’t answering right now. Scanning or typing the barcode usually still works.', list: [] }) }
-    }, OFF_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [q])
+    if (term.length < 3 || state.busy) return
+    setState({ busy: true, msg: '', list: [] })
+    try {
+      const list = await searchProducts(term)
+      setState({ busy: false, msg: list.length ? '' : 'No products with full nutrition info found. Try the barcode instead.', list })
+    } catch (err) { setState({ busy: false, msg: err.kind === 'offline' ? err.message : 'Open Food Facts search is busy right now. Try again in a minute, or scan or type the barcode, which usually still works.', list: [] }) }
+  }
   return html`<div class="stack">
     ${scan ? html`<${Scanner} onCode=${lookup} /><button class="btn ghost" onClick=${() => setScan(false)}>Stop scanning</button>`
       : cameraAvailable() && html`<button class="btn primary" onClick=${() => setScan(true)}>Scan a barcode</button>`}
-    <form class="inline-form" onSubmit=${e => { e.preventDefault(); lookup(code) }}>
+    <form class="field-row" onSubmit=${e => { e.preventDefault(); lookup(code) }}>
       <input id="off-barcode" class="input" inputmode="numeric" autocomplete="off" placeholder="Or type the barcode" value=${code} onInput=${e => setCode(e.target.value)} />
       <button class="btn" disabled=${!validBarcode(code) || state.busy}>Look up</button>
     </form>
-    <input id="off-search" class="input" type="search" placeholder="Search products by name" value=${q} onInput=${e => setQ(e.target.value)} />
+    <form class="field-row" onSubmit=${e => { e.preventDefault(); search() }}>
+      <input id="off-search" class="input" type="search" enterkeyhint="search" placeholder="Product name" value=${q} onInput=${e => setQ(e.target.value)} />
+      <button class="btn" disabled=${q.trim().length < 3 || state.busy}>Search</button>
+    </form>
     ${state.busy && html`<p class="muted small" role="status">Asking Open Food Facts…</p>`}
     ${state.msg && html`<p class="warn small" role="status">${state.msg}</p>`}
     ${state.list.length > 0 && html`<${FoodList} foods=${state.list} unit=${unit} onPick=${onPick} />`}

@@ -85,9 +85,11 @@ Data files (only when the sources change):
 - **Food values in `js/nutrition.js` are approximate.** They were written from general knowledge,
   not a cited table. Don't present them as sourced. Every food carries `src` (`afcd`, `off`,
   `custom`, `est`) and the UI shows it; keep it that way for any new source.
-- **Open Food Facts search** (`/cgi/search.pl`) is rate-limited and often 503s without CORS
-  headers, which shows up as "Failed to fetch". `search.openfoodfacts.org` sends no CORS headers
-  at all. Barcode lookups (`/api/v2/product`) are reliable. The UI points people to the barcode.
+- **Open Food Facts search** (`/cgi/search.pl`) allows ~10 searches/min per person and sheds
+  anonymous traffic with 503s that carry no CORS headers (seen as "Failed to fetch"). The
+  `X-User-Agent` header makes the browser send a CORS preflight per new URL, and those can 503
+  too. So name search runs only on a button, retries once after 3 s, and points people to the
+  barcode, which (`/api/v2/product`) is reliable. `search.openfoodfacts.org` has no CORS at all.
 
 ## Conventions
 
