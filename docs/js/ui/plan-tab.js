@@ -1,10 +1,10 @@
 // Plan: the week (a routine per weekday, or a rotation), routines and their editor, starter
 // plans, and the exercise library.
-import { html, useState, Sheet, Icon, Segmented, Stepper, Field, ConfirmButton, PageHead, Empty, fmtClock, fmtWeekday, fmtDate } from './core.js'
+import { html, useState, Sheet, Icon, Segmented, Stepper, Field, ConfirmButton, Toggle, PageHead, Empty, fmtClock, fmtWeekday, fmtDate } from './core.js'
 import { Library, LibrarySheet } from './library.js'
 import { BodyMap } from './bodymap.js'
 import { Thumb } from './media.js'
-import { exInfo, STARTER_PLANS } from '../exercises.js'
+import { exInfo, STARTER_PLANS, EXERCISES } from '../exercises.js'
 import { POLICIES } from '../progression.js'
 import { DAY_NAMES, emptyPlan, plannedFor, applyStarter, addDays, weekOf } from '../schedule.js'
 import { MUSCLE_NAME } from '../muscles.js'
@@ -57,7 +57,41 @@ function ItemRow({ it, i, n, onChange, onMove, onRemove, linked, onLink }) {
   </div>`
 }
 
-export function RoutineEditor({ app, routine, open, onClose }) {
+// Quick fill: muscle groups → a couple of solid exercises each, compounds first (core list order).
+export const MUSCLE_GROUPS = {
+  Chest: ['chest'], Back: ['upper-back', 'lower-back', 'trapezius'], Legs: ['quadriceps', 'hamstring', 'gluteal', 'calves'],
+  Shoulders: ['deltoids'], Arms: ['biceps', 'triceps'], Core: ['abs', 'obliques'],
+}
+const PER_GROUP = { Legs: 3, Back: 2, Chest: 2, Shoulders: 2, Arms: 2, Core: 1 }
+export function suggestItems(groups, existing = []) {
+  const have = new Set(existing.map(i => i.exId))
+  const out = []
+  for (const g of groups) {
+    const picks = EXERCISES.filter(e => !have.has(e.id) && (e.p || []).some(m => MUSCLE_GROUPS[g].includes(m)))
+    // Arms: one biceps and one triceps rather than two curls.
+    const chosen = g === 'Arms' ? [picks.find(e => e.p[0] === 'biceps'), picks.find(e => e.p[0] === 'triceps')].filter(Boolean) : picks.slice(0, PER_GROUP[g])
+    for (const e of chosen) {
+      have.add(e.id)
+      const timed = e.mode === 'time', big = ['barbell', 'trap'].includes(e.eq) && !['biceps', 'triceps', 'forearm', 'deltoids'].includes(e.p[0])
+      out.push({ exId: e.id, sets: 3, repsMin: timed ? 30 : big ? 5 : 8, repsMax: timed ? 30 : big ? 8 : 12, rir: big ? 2 : 1, ...(big ? { rest: 180 } : {}) })
+    }
+  }
+  return out
+}
+
+function QuickFill({ items, onAdd }) {
+  const [groups, setGroups] = useState([])
+  const toggle = g => setGroups(groups.includes(g) ? groups.filter(x => x !== g) : [...groups, g])
+  return html`<div class="card-flat stack">
+    <p class="section-label">Quick fill by muscle group</p>
+    <div class="chips">${Object.keys(MUSCLE_GROUPS).map(g => html`<button class=${'chip' + (groups.includes(g) ? ' on' : '')} onClick=${() => toggle(g)} aria-pressed=${groups.includes(g)}>${g}</button>`)}</div>
+    <button class="btn small" disabled=${!groups.length} onClick=${() => { const add = suggestItems(groups, items); if (add.length) onAdd(add); setGroups([]) }}>Add exercises for ${groups.length ? groups.join(', ') : 'these'}</button>
+  </div>`
+}
+
+export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', onStart }) {
+  const custom = mode === 'custom'
+  const [keep, setKeep] = useState(false)
   const [r, setR] = useState(routine)
   const [pick, setPick] = useState(false)
   if (open && routine && r?.id !== routine.id) setR(routine)
@@ -77,15 +111,25 @@ export function RoutineEditor({ app, routine, open, onClose }) {
     setItems(items.map((x, j) => (j === i + 1 || (j === i && !linked) ? { ...x, group: g } : x)))
   }
   const move = (i, d) => { const next = [...items];[next[i], next[i + d]] = [next[i + d], next[i]]; setItems(next) }
-  return html`<${Sheet} open=${open} title=${isNew ? 'New routine' : 'Edit routine'} onClose=${onClose} tall>
-    <input id="routine-name" class="input title-input" value=${r.name} placeholder="Routine name, e.g. Push Day" onInput=${e => setR({ ...r, name: e.target.value })} />
+  const start = () => {
+    const name = r.name.trim() || 'Custom workout'
+    const routine = { ...r, name }
+    if (keep) app.update(s => ({ ...s, profile: { ...s.profile, templates: [routine, ...s.profile.templates] } }), ['profile'])
+    onStart(keep ? routine : { ...routine, id: null })
+  }
+  return html`<${Sheet} open=${open} title=${custom ? 'Custom workout' : isNew ? 'New routine' : 'Edit routine'} onClose=${onClose} tall>
+    <input id="routine-name" class="input title-input" value=${r.name} placeholder=${custom ? 'Name it (optional), e.g. Arm day' : 'Routine name, e.g. Push Day'} onInput=${e => setR({ ...r, name: e.target.value })} />
+    ${(custom || items.length < 3) && html`<${QuickFill} items=${items} onAdd=${add => setItems([...items, ...add])} />`}
     ${items.length > 0 && html`<div class="card-flat"><p class="section-label">Muscles this works</p><${BodyMap} levels=${levelsOf(routineMuscles(r))} sex=${app.state.profile.settings.sex} size="sm" label=${'Muscles worked by ' + r.name} /></div>`}
     <div class="group">${items.map((it, i) => html`<${ItemRow} key=${it.exId + i} it=${it} i=${i} n=${items.length} linked=${!!it.group && items[i + 1]?.group === it.group}
       onChange=${v => setItems(items.map((x, j) => (j === i ? v : x)))} onMove=${d => move(i, d)} onRemove=${() => setItems(items.filter((_, j) => j !== i))} onLink=${() => link(i)} />`)}
       <button class="row-btn" onClick=${() => setPick(true)}><span class="row-ic"><${Icon} name="plus" size=${20} /></span><span class="row-main"><span>Add exercise</span></span></button>
     </div>
-    <button class="btn primary big" disabled=${!r.name.trim() || !items.length} onClick=${save}>Save routine</button>
-    ${!isNew && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to delete" onConfirm=${() => {
+    ${custom ? html`
+      <div class="group"><${Toggle} id="custom-keep" checked=${keep} onChange=${setKeep} label="Also save as a routine" hint="So you can pick it again or put it in your weekly plan." /></div>
+      <button class="btn primary big" disabled=${!items.length} onClick=${start}>Start workout</button>`
+      : html`<button class="btn primary big" disabled=${!r.name.trim() || !items.length} onClick=${save}>Save routine</button>`}
+    ${!isNew && !custom && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to delete" onConfirm=${() => {
       app.update(s => ({ ...s, profile: { ...s.profile, templates: s.profile.templates.filter(t => t.id !== r.id) } }), ['profile']); onClose()
     }}>Delete routine</${ConfirmButton}>`}
     <${LibrarySheet} open=${pick} onClose=${() => setPick(false)} app=${app} onPick=${exId => setItems([...items, { exId, sets: 3, repsMin: exInfo(exId).mode === 'time' ? 30 : 8, repsMax: exInfo(exId).mode === 'time' ? 30 : 12, rir: 2 }])} />

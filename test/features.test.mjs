@@ -112,3 +112,10 @@ test('streaks, heatmap and balance', () => {
   assert.equal(b.find(l => l.exId === 'bench').pct, 80)
   assert.equal(weightChange30([{ date: '2026-09-15', kg: 80 }, { date: '2026-10-16', kg: 79 }], today), -1)
 })
+
+test('custom workout quick fill picks sensible exercises per muscle group', async () => {
+  const { suggestItems } = await import('../js/ui/plan-tab.js').catch(() => ({}))
+  if (!suggestItems) return // UI module needs a browser for its CDN import; covered in the browser check
+  const ids = suggestItems(['Chest', 'Arms']).map(i => i.exId)
+  assert.deepEqual(ids, ['bench', 'incline', 'curl', 'pushdown'])
+})

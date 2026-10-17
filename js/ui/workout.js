@@ -3,6 +3,7 @@
 import { html, useState, useEffect, Icon, Sheet, Field, Chips, Toggle, ActionSheet, fmt, fmtClock, fmtWeekday } from './core.js'
 import { ExerciseCard } from './exercise-card.js'
 import { LibrarySheet } from './library.js'
+import { RoutineEditor } from './plan-tab.js'
 import { buildEntry, bestEverE1rm, DEFAULT_CFG } from '../plan.js'
 import { FEELINGS, workoutVolume, bestE1rm } from '../strength.js'
 import { liftedComparison, formatKg } from '../power.js'
@@ -51,7 +52,7 @@ export function toWorkout(session) {
   return { id: session.id, date: session.date, name: session.name, routineId: session.routineId || null, feeling: session.feeling, note: session.note || '', durationMin, entries }
 }
 
-export function StartSheet({ open, onClose, app, routine, onStart }) {
+export function StartSheet({ open, onClose, app, routine, onStart, onCustom }) {
   const [feeling, setFeeling] = useState('great')
   const [note, setNote] = useState('')
   const [warm, setWarm] = useState(true)
@@ -70,6 +71,8 @@ export function StartSheet({ open, onClose, app, routine, onStart }) {
       ${routines.map(r => html`<button class=${'row-btn' + (pick === r.id ? ' on' : '')} onClick=${() => setPick(r.id)}><span class="row-main"><span>${r.name}${routine?.id === r.id ? ' · today' : ''}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span>${pick === r.id && html`<${Icon} name="check" />`}</button>`)}
       <button class=${'row-btn' + (pick === '' ? ' on' : '')} onClick=${() => setPick('')}><span class="row-main"><span>Empty workout</span><small>Add exercises as you go</small></span>${pick === '' && html`<${Icon} name="check" />`}</button>
     </div>
+    ${onCustom && html`<div class="group"><button class="row-btn" onClick=${() => onCustom({ feeling, note, warm })}><span class="row-ic"><${Icon} name="edit" size=${20} /></span>
+      <span class="row-main"><span>Build a custom workout</span><small>Pick exercises, sets, reps and rest first, or quick-fill by muscle group</small></span><${Icon} name="right" size=${18} /></button></div>`}
     <div class="group"><${Toggle} id="start-warm" checked=${warm} onChange=${setWarm} label="Add warm-up sets" hint="Ramp-up sets for barbell lifts, worked out from your first working weight." /></div>
     <button class="btn primary big" onClick=${() => { primeAudio(); onStart(routines.find(r => r.id === pick) || null, { feeling, note, warm }) }}>Start</button>
   </${Sheet}>`
@@ -203,6 +206,10 @@ export function WorkoutTab({ app }) {
   const { active, profile, workouts } = app.state
   const [result, setResult] = useState(null)
   const [starting, setStarting] = useState(false)
+  const [custom, setCustom] = useState(null) // start options while the builder is open
+  const [draft, setDraft] = useState(null)
+  const [chosen, setChosen] = useState(null)
+  const openCustom = (opts = { feeling: 'great', note: '', warm: true }) => { setStarting(false); setDraft({ id: 'r' + uid(), name: '', items: [] }); setCustom(opts) }
   if (result) return html`<${Summary} result=${result} onDone=${() => { setResult(null); app.go('home') }} />`
   if (active) {
     const finish = () => {
@@ -226,9 +233,18 @@ export function WorkoutTab({ app }) {
       <p class="title-2">${planned ? planned.name : 'Train anyway?'}</p>
       ${planned && html`<p class="muted small">${planned.items.map(i => exInfo(i.exId).name).join(' · ')}</p>`}
       ${doneToday && html`<p class="muted small">You've already trained today.</p>`}
-      <button class="btn primary big" onClick=${() => setStarting(true)}>${planned ? 'Start ' + planned.name : 'Start a workout'}</button>
+      <button class="btn primary big" onClick=${() => { setChosen(null); setStarting(true) }}>${planned ? 'Start ' + planned.name : 'Start a workout'}</button>
     </div>
-    <${StartSheet} open=${starting} onClose=${() => setStarting(false)} app=${app} routine=${planned}
+    <button class="card custom-card" onClick=${() => openCustom()}>
+      <span class="today-ic"><${Icon} name="edit" /></span>
+      <span class="row-main"><span class="title-3">Custom workout</span><small>Build today's session your way: exercises, sets, reps and rest. Save it as a routine if you like it.</small></span>
+      <${Icon} name="right" size=${18} />
+    </button>
+    ${profile.templates.length > 0 && html`<p class="section-label">Your routines</p>
+      <div class="group">${profile.templates.map(r => html`<button class="row-btn" onClick=${() => { setChosen(r); setStarting(true) }}><span class="row-main"><span>${r.name}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span><${Icon} name="right" size=${16} /></button>`)}</div>`}
+    <${StartSheet} open=${starting} onClose=${() => setStarting(false)} app=${app} routine=${chosen || planned} onCustom=${openCustom}
       onStart=${(r, opts) => { setStarting(false); app.update(s => ({ ...s, active: newSession(app, r, opts) }), ['profile']) }} />
+    <${RoutineEditor} app=${app} routine=${draft} open=${!!custom} mode="custom" onClose=${() => setCustom(null)}
+      onStart=${r => { const opts = custom; setCustom(null); app.update(s => ({ ...s, active: newSession({ state: s }, r, opts) }), ['profile']) }} />
   </div>`
 }
