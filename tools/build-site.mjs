@@ -116,6 +116,7 @@ writeFileSync(join(OUT, 'manifest.webmanifest'), JSON.stringify({
 const shell = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', ...jsFiles.map(f => relative(SRC, f).replace(/\\/g, '/'))]
 const hash = createHash('sha256')
 for (const f of walk(OUT).sort()) hash.update(relative(OUT, f)).update(readFileSync(f))
+hash.update(readFileSync(fileURLToPath(import.meta.url))) // the service worker template lives here
 const VERSION = hash.digest('hex').slice(0, 12)
 
 writeFileSync(join(OUT, 'sw.js'), `// Offline cache for Power Level. VERSION changes on every build, which replaces the old cache.
