@@ -3,7 +3,9 @@ const VERSION = 'ee5d0538a67e'
 const SHELL = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-180.png","js/app.js","js/data/body.json","js/data/catalog.json","js/examples.js","js/exercises.js","js/journey.js","js/muscles.js","js/nutrition.js","js/photos.js","js/plan.js","js/power.js","js/progression.js","js/schedule.js","js/stats.js","js/store.js","js/strength.js","js/ui/bodymap.js","js/ui/charts.js","js/ui/core.js","js/ui/exercise-card.js","js/ui/food.js","js/ui/goals.js","js/ui/hero.js","js/ui/home.js","js/ui/library.js","js/ui/media.js","js/ui/photos.js","js/ui/plan-tab.js","js/ui/rest.js","js/ui/set-row.js","js/ui/settings.js","js/ui/stats-tab.js","js/ui/workout.js"]
 const CDN = ["https://unpkg.com/htm@3.1.1/preact/standalone.module.js"]
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open('pl-' + VERSION).then(c => c.addAll([...SHELL, ...CDN])).then(() => self.skipWaiting()))
+  // cache: 'reload' skips the browser's HTTP cache (GitHub Pages sends max-age=600), so a new
+  // version never gets cached with a stale file from the old one.
+  e.waitUntil(caches.open('pl-' + VERSION).then(c => c.addAll([...SHELL, ...CDN].map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()))
 })
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('pl-') && k !== 'pl-' + VERSION && k !== 'pl-fonts' && k !== 'pl-img').map(k => caches.delete(k)))).then(() => self.clients.claim()))

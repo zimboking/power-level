@@ -123,7 +123,9 @@ const VERSION = '${VERSION}'
 const SHELL = ${JSON.stringify(shell)}
 const CDN = ${JSON.stringify([PREACT])}
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open('pl-' + VERSION).then(c => c.addAll([...SHELL, ...CDN])).then(() => self.skipWaiting()))
+  // cache: 'reload' skips the browser's HTTP cache (GitHub Pages sends max-age=600), so a new
+  // version never gets cached with a stale file from the old one.
+  e.waitUntil(caches.open('pl-' + VERSION).then(c => c.addAll([...SHELL, ...CDN].map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()))
 })
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('pl-') && k !== 'pl-' + VERSION && k !== 'pl-fonts' && k !== 'pl-img').map(k => caches.delete(k)))).then(() => self.clients.claim()))
