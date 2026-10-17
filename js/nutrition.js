@@ -31,7 +31,9 @@ export function targets(profile) {
   return { kcal, protein, carbs, fat, tdee: Math.round(tdee) }
 }
 
-// [name, kcal, protein, carbs, fat] per 100 g, plus an optional common serving.
+// Quick picks. [name, kcal, protein, carbs, fat] per 100 g, plus an optional common serving.
+// These are rough estimates typed from general knowledge, not taken from a cited table, so
+// they carry src: 'est' and the UI labels them as estimates. Sourced data is in js/foods.js.
 const RAW = [
   ['Chicken breast, cooked', 165, 31, 0, 3.6, 'breast', 170],
   ['Chicken thigh, cooked', 209, 26, 0, 10.9, 'thigh', 110],
@@ -84,7 +86,7 @@ const RAW = [
 ]
 
 export const FOODS = RAW.map(([name, kcal, p, c, f, unit, g], i) => ({
-  id: 'f' + i, name, kcal, p, c, f, ...(unit ? { serving: { unit, g } } : {}),
+  id: 'f' + i, src: 'est', name, kcal, p, c, f, ...(unit ? { serving: { unit, g } } : {}),
 }))
 
 // Macros for an amount of a food, in grams.
@@ -98,13 +100,6 @@ export function sumEntries(entries) {
   return (entries || []).reduce((t, e) => ({
     kcal: t.kcal + (e.kcal || 0), p: t.p + (e.p || 0), c: t.c + (e.c || 0), f: t.f + (e.f || 0),
   }), { kcal: 0, p: 0, c: 0, f: 0 })
-}
-
-export function searchFoods(q, extra = []) {
-  const all = [...extra, ...FOODS]
-  const s = q.trim().toLowerCase()
-  if (!s) return all.slice(0, 12)
-  return all.filter(f => f.name.toLowerCase().includes(s)).slice(0, 20)
 }
 
 // Energy units. Everything is stored in kcal; kJ is display and entry only (1 kcal = 4.184 kJ).

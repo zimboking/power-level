@@ -70,6 +70,7 @@ export function SettingsSheet({ open, onClose, app }) {
       ${app.state.profile.example && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to clear everything" onConfirm=${() => app.replaceAll({ profile: { ...app.state.profile, example: false, weighins: [], goals: [], templates: [], plan: emptyPlan() }, workouts: [], food: {} })}>Clear example data</${ConfirmButton}>`}
     </div>
     <p class="muted small center">Exercise photos: free-exercise-db (public domain). Body diagram: MuscleMap (MIT).</p>
+    <p class="muted small center">Food data: Australian Food Composition Database, Release 3, by Food Standards Australia New Zealand (CC BY 4.0); FSANZ does not endorse this app. Packaged products: Open Food Facts contributors (ODbL). Quick picks are rough estimates, not from a cited table.</p>
     <${Sheet} open=${restWheel} title="Default rest" onClose=${() => setRestWheel(false)}>
       <${WheelPicker} value=${s.rest || 150} onChange=${v => set({ rest: v })} />
       <button class="btn primary" onClick=${() => setRestWheel(false)}>Done</button>

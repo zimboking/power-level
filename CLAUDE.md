@@ -36,11 +36,15 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/journey.js` | Goal journey planner (4-week blocks, deload, test day) |
 | `js/schedule.js` | Weekly / rotation plans, overrides, next session, starter plans |
 | `js/muscles.js`, `js/stats.js` | Muscle-map maths, heatmap, streaks, strength balance |
-| `js/nutrition.js` | Food list (approximate values), Mifflin-St Jeor targets, kcal/kJ |
+| `js/nutrition.js` | Quick-pick foods (estimates, `src: 'est'`), Mifflin-St Jeor targets, kcal/kJ |
+| `js/foods.js` | Food sources, AFCD loader, search ranking across saved / AFCD / estimates |
+| `js/off.js` | Open Food Facts barcode lookup and name search (online only) |
 | `js/exercises.js` | 32 core exercises + catalogue loader + registry of picked exercises |
 | `js/store.js` | Persistence (Claude artifact db or localStorage), backups |
 | `js/data/catalog.json`, `body.json` | Generated; see `tools/build-data.mjs` and NOTICE.md |
+| `js/data/foods.json` | Generated from FSANZ AFCD Release 3; see `tools/build-foods.mjs` |
 | `js/ui/*.js` | Views: home, plan-tab, workout, exercise-card, set-row, stats-tab, food, library… |
+| `tools/xlsx.mjs` | Tiny dependency-free .xlsx reader for build scripts |
 | `tools/build-site.mjs` | Builds `docs/` (head, manifest, icons, service worker) |
 | `docs/` | Built site served by GitHub Pages. Never edit by hand |
 | `test/*.test.mjs` | Logic tests |
@@ -48,13 +52,14 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```
 
 Data files (only when the sources change):
 `node tools/build-data.mjs <free-exercise-db exercises.json> <openGym frontend/src/lib/body-paths.js>`
+`node tools/build-foods.mjs "<AFCD Release 3 - Nutrient profiles.xlsx>"` (from the FSANZ AFCD download page)
 
 ## Testing in a browser
 
@@ -78,7 +83,11 @@ Data files (only when the sources change):
 - **State is immutable**: `app.update(fn, keys)` with save keys `'profile'`, `'w:<workoutId>'`,
   `'f:<date>'`.
 - **Food values in `js/nutrition.js` are approximate.** They were written from general knowledge,
-  not a cited table. Don't present them as sourced.
+  not a cited table. Don't present them as sourced. Every food carries `src` (`afcd`, `off`,
+  `custom`, `est`) and the UI shows it; keep it that way for any new source.
+- **Open Food Facts search** (`/cgi/search.pl`) is rate-limited and often 503s without CORS
+  headers, which shows up as "Failed to fetch". `search.openfoodfacts.org` sends no CORS headers
+  at all. Barcode lookups (`/api/v2/product`) are reliable. The UI points people to the barcode.
 
 ## Conventions
 

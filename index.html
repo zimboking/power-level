@@ -476,6 +476,18 @@ details summary { cursor: pointer; }
 .pick-list span { font-size: .8rem; color: var(--label-2); }
 .toggle { display: flex; gap: 8px; align-items: center; font-size: .92rem; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--green); }
+.pick-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.pick-list .pick-top b { font-weight: 500; overflow-wrap: anywhere; min-width: 0; }
+.src-tag { flex: none; font-style: normal; font-size: .7rem; font-weight: 600; letter-spacing: .02em; border-radius: 6px; padding: 2px 6px; background: var(--surface-3); color: var(--label-2); white-space: nowrap; }
+.src-afcd { color: var(--teal); background: color-mix(in srgb, var(--teal) 16%, transparent); }
+.src-off { color: var(--orange); background: color-mix(in srgb, var(--orange) 16%, transparent); }
+.src-custom { color: var(--green); background: color-mix(in srgb, var(--green) 16%, transparent); }
+.src-est { color: var(--label-2); background: var(--surface-3); }
+.inline-form { display: flex; gap: 8px; } .inline-form .input { flex: 1; min-width: 0; }
+.scanner { position: relative; border-radius: var(--r); overflow: hidden; background: #000; }
+.scanner video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.scanner-frame { position: absolute; left: 12%; right: 12%; top: 30%; height: 30%; border: 2px solid var(--yellow); border-radius: 10px; pointer-events: none; }
+.scanner p { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; padding: 8px; background: rgba(0, 0, 0, .55); color: #fff; }
 
 /* Photos */
 .file-btn { position: relative; overflow: hidden; }

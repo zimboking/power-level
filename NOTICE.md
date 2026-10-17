@@ -36,6 +36,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Food composition data
+
+`js/data/foods.json` is derived from the **Australian Food Composition Database (AFCD),
+Release 3** (December 2025) by **Food Standards Australia New Zealand**, from the
+[AFCD download page](https://www.foodstandards.gov.au/science-data/food-nutrient-databases/afcd/australian-food-composition-database-download-excel-files).
+Used under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/) as
+stated in the [FSANZ copyright notice](https://www.foodstandards.gov.au/copyright).
+Attribution: Food Standards Australia New Zealand. FSANZ does not endorse this app.
+
+Changes made: only energy, protein, total fat and available carbohydrate (with sugar alcohols)
+per 100 g are kept; energy ("with dietary fibre, equated") is converted from kJ to kcal
+(÷ 4.184, rounded) and macros are rounded to 0.1 g. See `tools/build-foods.mjs`.
+
+## Packaged products
+
+Barcode and product search use [Open Food Facts](https://world.openfoodfacts.org) at runtime.
+Its database is available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/)
+and individual contents under the [Database Contents License](https://opendatacommons.org/licenses/dbcl/1-0/).
+Product data © Open Food Facts contributors. Nothing from it is bundled with the app; products
+a user saves are kept only in their own browser.
+
+The camera scanner falls back to [barcode-detector](https://github.com/Sec-ant/barcode-detector)
+(MIT) with [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) (MIT, ZXing-C++ Apache-2.0), loaded
+from jsDelivr only on browsers without a built-in `BarcodeDetector`.
+
+## Quick-pick food estimates
+
+The ~50 quick picks in `js/nutrition.js` were typed from general knowledge, not from a cited
+table. The app labels them as estimates.
+
 ## Ideas
 
 Feature ideas (deriving targets from the log, progression policies, the RIR %1RM table) come
