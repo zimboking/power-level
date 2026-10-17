@@ -155,5 +155,14 @@ render(html`<${App} />`, document.getElementById('root'))
 
 // Offline support on the hosted website (service workers don't run inside Claude).
 if (isStandalone() && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => { /* app still works online */ })
+  // When an update takes over, reload once so the new version shows straight away. Everything,
+  // a workout in progress included, is already saved, so nothing is lost.
+  const hadController = !!navigator.serviceWorker.controller
+  let reloaded = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return
+    reloaded = true
+    location.reload()
+  })
+  navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => { /* app still works online */ })
 }
