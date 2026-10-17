@@ -1,24 +1,26 @@
-// App shell: loads your data, keeps it in one immutable state object, saves what changed,
-// and runs the tab bar, rest timer, toasts and the power-up moment.
-import { html, render, useState, useEffect, useMemo, useRef } from './ui/core.js'
-import { loadAll, createSaver, isStandalone, requestPersistence } from './store.js'
+// App shell: loads your data, keeps it in one immutable state object, saves what changed, and
+// runs the tab bar, rest timer, toasts, editing past workouts and the power-up moment.
+import { html, render, useState, useEffect, useMemo, useRef, Icon } from './ui/core.js'
+import { loadAll, createSaver, isStandalone, requestPersistence, uid, today } from './store.js'
 import { powerLevel, tierFor } from './power.js'
-import { HomeView, SettingsSheet } from './ui/home.js'
-import { WorkoutView } from './ui/workout.js'
-import { ProgressView } from './ui/progress.js'
-import { GoalsView } from './ui/goals.js'
+import { setRegistry, registryEntry } from './exercises.js'
+import { addDays } from './schedule.js'
+import { HomeView } from './ui/home.js'
+import { SettingsSheet } from './ui/settings.js'
+import { WorkoutTab, SessionScreen, sessionFromWorkout, toWorkout, newSession } from './ui/workout.js'
+import { PlanTab } from './ui/plan-tab.js'
+import { StatsTab } from './ui/stats-tab.js'
 import { FoodView } from './ui/food.js'
 import { Fighter } from './ui/hero.js'
 import { RestTimer, startTimer } from './ui/rest.js'
 
 const TABS = [
-  { id: 'home', label: 'Home', icon: 'M3 11 12 4l9 7v9h-6v-6H9v6H3z' },
-  { id: 'train', label: 'Train', icon: 'M2 10h3v4H2zm17 0h3v4h-3zM5 8h3v8H5zm11 0h3v8h-3zM8 11h8v2H8z' },
-  { id: 'goals', label: 'Goals', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z' },
-  { id: 'progress', label: 'Progress', icon: 'M3 20h18v1H3zm1-3 5-6 4 3 6-8 1.6 1.2-7.2 9.6-4-3-3.8 4.6z' },
-  { id: 'food', label: 'Food', icon: 'M7 2h2v8a2 2 0 0 1-1 1.7V22H6V11.7A2 2 0 0 1 5 10V2h1v6h1zm9 0c2 0 3 3 3 6s-1 4-2 4v10h-2V2z' },
+  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'plan', label: 'Plan', icon: 'plan' },
+  { id: 'train', label: 'Start', icon: 'dumbbell', centre: true },
+  { id: 'stats', label: 'Stats', icon: 'stats' },
+  { id: 'food', label: 'Food', icon: 'food' },
 ]
-const TITLES = { home: 'Power Level', train: 'Train', goals: 'Goals', progress: 'Progress', food: 'Food' }
 
 function PowerUp({ tier, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3200); return () => clearTimeout(t) }, [])
@@ -27,14 +29,21 @@ function PowerUp({ tier, onDone }) {
     <p class="eyebrow">Power up!</p><p class="powerup-name">${tier.name}</p></div></div>`
 }
 
+function Toast({ toast, onClose }) {
+  useEffect(() => { const t = setTimeout(onClose, toast.action ? 5000 : 3000); return () => clearTimeout(t) }, [toast])
+  return html`<div class="toast" role="status"><span>${toast.text}</span>${toast.action && html`<button class="toast-btn" onClick=${() => { toast.action.run(); onClose() }}>${toast.action.label}</button>`}</div>`
+}
+
 function App() {
   const [state, setState] = useState(null)
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('pl.tab') || 'home' } catch { return 'home' } })
+  const [tabParam, setTabParam] = useState(null)
   const [rest, setRest] = useState(null)
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useState(null)
   const [settings, setSettings] = useState(false)
   const [powerUp, setPowerUp] = useState(null)
-  const [sample, setSample] = useState(null)
+  const [editing, setEditing] = useState(null)
+  const [loadErr, setLoadErr] = useState('')
   const stateRef = useRef(null)
   const saver = useRef(null)
   const modeRef = useRef('local')
@@ -45,15 +54,13 @@ function App() {
       if (!alive) return
       modeRef.current = d.mode
       stateRef.current = { profile: d.profile, workouts: d.workouts, food: d.food, active: d.active }
-      saver.current = createSaver(d.conn, () => stateRef.current, msg => setToast(msg))
+      saver.current = createSaver(d.conn, () => stateRef.current, msg => setToast({ text: msg }))
       setState(stateRef.current)
-    }).catch(() => {
-      stateRef.current = null
-      setToast('Couldn’t load your data. Reload the page to try again.')
-    })
-    window.claude?.use?.('sample').then(s => alive && setSample(s || null)).catch(() => {})
+    }).catch(() => setLoadErr('Couldn’t load your data. Reload the page to try again.'))
     return () => { alive = false }
   }, [])
+  useEffect(() => { try { localStorage.setItem('pl.tab', tab) } catch { /* private mode */ } window.scrollTo(0, 0) }, [tab])
+
   // Keep the screen on while a workout is running; the browser drops the lock when the tab hides.
   const activeId = state?.active?.id
   useEffect(() => {
@@ -66,9 +73,8 @@ function App() {
     return () => { alive = false; document.removeEventListener('visibilitychange', onVis); lock?.release().catch(() => {}) }
   }, [activeId])
   useEffect(() => { if (state && modeRef.current === 'local') requestPersistence() }, [!!state])
-  useEffect(() => { try { localStorage.setItem('pl.tab', tab) } catch { /* private mode */ } window.scrollTo(0, 0) }, [tab])
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3500); return () => clearTimeout(t) }, [toast])
 
+  if (state) setRegistry(state.profile.exercises)
   const level = useMemo(() => (state ? powerLevel(state.workouts) : 0), [state?.workouts])
   const tier = tierFor(level)
   const prevTier = useRef(null)
@@ -78,20 +84,23 @@ function App() {
     prevTier.current = tier.idx
   }, [tier.idx])
 
-  if (!state) return html`<div class="loading"><div class="loading-dot"></div><p>Charging up…</p>${toast && html`<p class="warn">${toast}</p>`}</div>`
+  if (!state) return html`<div class="loading"><div class="loading-dot"></div><p>Charging up…</p>${loadErr && html`<p class="warn">${loadErr}</p>`}</div>`
 
+  const update = (fn, keys = []) => {
+    const next = fn(stateRef.current)
+    stateRef.current = next
+    setState(next)
+    keys.forEach(k => saver.current.mark(k))
+  }
   const app = {
-    state, mode: modeRef.current, sample,
+    state, mode: modeRef.current,
     power: { level, tier },
     powerAfter: ws => powerLevel(ws),
-    go: setTab,
-    toast: setToast,
-    update(fn, keys = []) {
-      const next = fn(stateRef.current)
-      stateRef.current = next
-      setState(next)
-      keys.forEach(k => saver.current.mark(k))
-    },
+    go: (t, param = null) => { setTab(t); setTabParam(param) },
+    toast: t => setToast(typeof t === 'string' ? { text: t } : t),
+    update,
+    setSetting: patch => update(s => ({ ...s, profile: { ...s.profile, settings: { ...s.profile.settings, ...patch } } }), ['profile']),
+    registerExercise: ex => update(s => (s.profile.exercises?.[ex.id] ? s : { ...s, profile: { ...s.profile, exercises: { ...(s.profile.exercises || {}), [ex.id]: registryEntry(ex) } } }), ['profile']),
     replaceAll(d) {
       const prev = stateRef.current
       const next = { ...prev, profile: { ...prev.profile, ...d.profile }, workouts: d.workouts || [], food: d.food || {} }
@@ -101,30 +110,42 @@ function App() {
       const days = new Set([...Object.keys(prev.food), ...Object.keys(next.food)])
       saver.current.mark('profile')
       ids.forEach(id => saver.current.mark('w:' + id))
-      days.forEach(d => saver.current.mark('f:' + d))
+      days.forEach(day => saver.current.mark('f:' + day))
     },
     startRest: sec => setRest(startTimer(sec)),
-    resting: !!rest,
     stopRest: () => setRest(null),
+    resting: !!rest,
+    openSettings: () => setSettings(true),
+    editWorkout: w => setEditing(sessionFromWorkout(w)),
+    logPast: () => setEditing({ ...newSession({ state }, null, { date: addDays(today(), -1), warm: false }), editing: true, isNew: true, durationMin: 60 }),
+    repeatWorkout: w => {
+      if (state.active) { setToast({ text: 'Finish or discard the current workout first.' }); return }
+      const routine = { id: w.routineId, name: w.name, items: w.entries.map(e => ({ ...(e.cfg || {}), exId: e.exId, sets: e.sets.filter(s => !s.warmup).length, group: e.group ? e.group.replace(/^g-?/, '') : undefined })) }
+      update(s => ({ ...s, active: newSession({ state: s }, routine, { feeling: 'great' }) }), ['profile'])
+      setTab('train')
+    },
+  }
+  const saveEdit = () => {
+    const w = { ...toWorkout(editing), ...(editing.isNew ? { id: uid() } : {}) }
+    if (!w.entries.length) { setToast({ text: 'Add at least one set to save.' }); return }
+    update(s => ({ ...s, workouts: editing.isNew ? [...s.workouts, w] : s.workouts.map(x => (x.id === w.id ? w : x)) }), ['w:' + w.id])
+    setEditing(null)
+    setToast({ text: editing.isNew ? 'Workout logged' : 'Workout updated. Records recalculated.' })
   }
 
-  const View = { home: HomeView, train: WorkoutView, goals: GoalsView, progress: ProgressView, food: FoodView }[tab] || HomeView
-  return html`<div class="app">
-    <header class="topbar">
-      <h1 class="brand">${TITLES[tab]}</h1>
-      <div class="topbar-right">
-        ${state.active && tab !== 'train' && html`<button class="pill live" onClick=${() => setTab('train')}>● Workout on</button>`}
-        <button class="icon-btn" aria-label="Settings" onClick=${() => setSettings(true)}><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
-      </div>
-    </header>
-    <main class="main"><${View} app=${app} /></main>
-    ${rest && html`<${RestTimer} timer=${rest} setTimer=${setRest} sound=${state.profile.settings.restSound !== false}
-      onToggleSound=${e => app.update(s => ({ ...s, profile: { ...s.profile, settings: { ...s.profile.settings, restSound: e.target.checked } } }), ['profile'])} />`}
-    ${toast && html`<div class="toast" role="status">${toast}</div>`}
-    <nav class="tabbar" aria-label="Sections">
-      ${TABS.map(t => html`<button class=${'tab' + (tab === t.id ? ' on' : '')} aria-current=${tab === t.id ? 'page' : undefined} onClick=${() => setTab(t.id)}>
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d=${t.icon} /></svg><span>${t.label}</span></button>`)}
-    </nav>
+  const View = { home: HomeView, plan: PlanTab, train: WorkoutTab, stats: StatsTab, food: FoodView }[tab] || HomeView
+  const inSession = tab === 'train' && state.active
+  return html`<div class=${'app' + (inSession || editing ? ' in-session' : '')}>
+    <main class="main">${editing
+      ? html`<${SessionScreen} app=${app} session=${editing} onChange=${setEditing} onFinish=${saveEdit} onDiscard=${() => setEditing(null)} onClose=${() => setEditing(null)} />`
+      : html`<${View} app=${app} initial=${tabParam} key=${tab} />`}</main>
+    ${rest && html`<${RestTimer} timer=${rest} setTimer=${setRest} sound=${state.profile.settings.restSound !== false} flash=${!!state.profile.settings.restFlash}
+      onToggleSound=${e => app.setSetting({ restSound: e.target.checked })} />`}
+    ${toast && html`<${Toast} toast=${toast} onClose=${() => setToast(null)} />`}
+    ${!editing && html`<nav class="tabbar" aria-label="Sections">
+      ${TABS.map(t => html`<button class=${'tab' + (tab === t.id ? ' on' : '') + (t.centre ? ' centre' : '')} aria-current=${tab === t.id ? 'page' : undefined} onClick=${() => app.go(t.id)}>
+        <span class="tab-ic"><${Icon} name=${t.icon} size=${t.centre ? 26 : 24} /></span><span>${t.centre && state.active ? 'Workout' : t.label}</span></button>`)}
+    </nav>`}
     <${SettingsSheet} open=${settings} onClose=${() => setSettings(false)} app=${app} />
     ${powerUp && html`<${PowerUp} tier=${powerUp} onDone=${() => setPowerUp(null)} />`}
   </div>`

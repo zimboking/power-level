@@ -1,3 +1,5 @@
+import { exInfo } from './exercises.js'
+
 // Strength maths. Every function is pure: the workout log is the only source of truth and
 // targets are derived from it each time they are needed (the same idea openGym uses), so a
 // fixed typo or a changed setting immediately produces the right next number.
@@ -39,7 +41,7 @@ export function weightFor(oneRm, reps, rir = 2, step = DEFAULT_STEP) {
 }
 
 export const isWork = set => !set.warmup
-export const setDone = set => !!set.done && set.r > 0
+export const setDone = set => !!set.done && (set.r > 0 || set.sec > 0)
 
 // Best e1RM in a logged session for one exercise entry.
 export function bestE1rm(entry) {
@@ -52,8 +54,10 @@ export function bestE1rm(entry) {
   return best
 }
 
+// Volume = load × reps. Per-side exercises count both sides; timed sets and plain bodyweight carry none.
 export function entryVolume(entry) {
-  return (entry.sets || []).reduce((sum, s) => (isWork(s) && setDone(s) ? sum + (s.w || 0) * s.r : sum), 0)
+  const sides = exInfo(entry.exId).uni ? 2 : 1
+  return (entry.sets || []).reduce((sum, s) => (isWork(s) && setDone(s) && s.r > 0 ? sum + (s.w || 0) * s.r * sides : sum), 0)
 }
 export const workoutVolume = w => (w.entries || []).reduce((sum, e) => sum + entryVolume(e), 0)
 

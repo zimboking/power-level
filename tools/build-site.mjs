@@ -70,7 +70,7 @@ function iconPng(size) {
 if (existsSync(OUT)) for (const f of readdirSync(OUT)) if (f !== '.git') rmSync(join(OUT, f), { recursive: true, force: true })
 mkdirSync(join(OUT, 'icons'), { recursive: true })
 
-const jsFiles = walk(join(SRC, 'js')).filter(f => f.endsWith('.js'))
+const jsFiles = walk(join(SRC, 'js')).filter(f => f.endsWith('.js') || f.endsWith('.json'))
 for (const f of jsFiles) {
   const dest = join(OUT, relative(SRC, f))
   mkdirSync(dirname(dest), { recursive: true })
@@ -126,7 +126,7 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open('pl-' + VERSION).then(c => c.addAll([...SHELL, ...CDN])).then(() => self.skipWaiting()))
 })
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('pl-') && k !== 'pl-' + VERSION && k !== 'pl-fonts').map(k => caches.delete(k)))).then(() => self.clients.claim()))
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('pl-') && k !== 'pl-' + VERSION && k !== 'pl-fonts' && k !== 'pl-img').map(k => caches.delete(k)))).then(() => self.clients.claim()))
 })
 self.addEventListener('fetch', e => {
   const req = e.request
@@ -135,6 +135,11 @@ self.addEventListener('fetch', e => {
   // Fonts: cache as they're used, so the second visit works offline too.
   if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
     e.respondWith(caches.open('pl-fonts').then(c => c.match(req).then(hit => hit || fetch(req).then(res => { c.put(req, res.clone()); return res }))))
+    return
+  }
+  // Exercise photos: kept once seen, so the demos you use work offline.
+  if (url.hostname === 'raw.githubusercontent.com' && url.pathname.includes('/free-exercise-db/')) {
+    e.respondWith(caches.open('pl-img').then(c => c.match(req).then(hit => hit || fetch(req).then(res => { if (res.ok) c.put(req, res.clone()); return res }))))
     return
   }
   if (url.origin !== location.origin && !CDN.includes(req.url)) return

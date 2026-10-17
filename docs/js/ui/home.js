@@ -1,41 +1,78 @@
-// Home: the fighter, a weight check, today's food at a glance, and goal progress.
-import { html, useState, useEffect, Sheet, Field, Chips, fmt, fmtDate, ConfirmButton } from './core.js'
+// Home: this week at a glance, today's session (or when the next one is), the fighter, a weight
+// check, your streak, food today and goals.
+import { html, useState, useEffect, Sheet, Icon, PageHead, fmt, fmtDate, fmtWeekday } from './core.js'
 import { PowerCard, Fighter } from './hero.js'
-import { TIERS, liftedComparison, formatKg } from '../power.js'
-import { workoutVolume } from '../strength.js'
-import { sumEntries, ACTIVITY, GOALS, energyUnitOf, toUnit, fmtEnergy, ENERGY_UNITS } from '../nutrition.js'
+import { LineChart } from './charts.js'
+import { TIERS } from '../power.js'
+import { sumEntries, energyUnitOf, toUnit, fmtEnergy } from '../nutrition.js'
 import { journeyFor, latestBodyweight } from '../plan.js'
 import { percentThere } from '../journey.js'
 import { exInfo } from '../exercises.js'
+import { weekOf, plannedFor, nextSession, addDays, DAY_SHORT, hasPlan } from '../schedule.js'
+import { streakWeeks } from '../stats.js'
+import { rollingAverage } from '../strength.js'
 import { dailyTargets } from './food.js'
-import { today, isStandalone, makeBackup, parseBackup, downloadFile } from '../store.js'
+import { today, isStandalone, makeBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 
 const daysSince = iso => (iso ? Math.floor((Date.now() - new Date(iso + 'T00:00:00')) / 864e5) : Infinity)
 
-function WeighIn({ app }) {
-  const last = latestBodyweight(app.state.profile)
+function WeekCard({ app }) {
+  const { profile, workouts, active } = app.state
+  const ws = profile.plan?.weekStart ?? 1
+  const [offset, setOffset] = useState(0)
+  const [sel, setSel] = useState(today())
+  const days = weekOf(addDays(today(), offset * 7), ws)
+  const trained = new Set(workouts.map(w => w.date))
+  const planned = d => (d >= today() ? plannedFor(profile, workouts, d, today()) : null)
+  const selWorkouts = workouts.filter(w => w.date === sel)
+  const selPlan = planned(sel)
+  const next = nextSession(profile, workouts, today())
+  const isToday = sel === today()
+  let body
+  if (isToday && active) body = html`<div class="today-row"><span class="today-ic live"><${Icon} name="dumbbell" /></span><span class="row-main"><small>IN PROGRESS</small><span>${active.name}</span></span><button class="pill-go" onClick=${() => app.go('train')}>Resume</button></div>`
+  else if (selWorkouts.length) body = html`<div class="today-row"><span class="today-ic done"><${Icon} name="check" /></span><span class="row-main"><small>${isToday ? 'TODAY' : fmtWeekday(sel).toUpperCase()} · DONE</small><span>${selWorkouts.map(w => w.name).join(' + ')}</span></span></div>`
+  else if (selPlan) body = html`<div class="today-row"><span class="today-ic"><${Icon} name="dumbbell" /></span><span class="row-main"><small>${isToday ? 'TODAY' : fmtWeekday(sel).toUpperCase()}${profile.plan?.overrides?.[sel] ? ' · RESCHEDULED' : ''}</small><span>${selPlan.name}</span></span>${isToday ? html`<button class="pill-go" onClick=${() => app.go('train')}>Start</button>` : null}</div>`
+  else if (!hasPlan(profile)) body = html`<div class="today-row"><span class="today-ic soft"><${Icon} name="calendar" /></span><span class="row-main"><small>NO PLAN YET</small><span>Set up your week</span></span><button class="pill-go" onClick=${() => app.go('plan')}>Plan</button></div>`
+  else body = html`<div class="today-row"><span class="today-ic soft"><${Icon} name="calendar" /></span><span class="row-main"><small>${isToday ? 'TODAY · REST DAY' : sel < today() ? 'NOTHING LOGGED' : 'REST DAY'}</small><span>${next ? `Next: ${next.routine.name}, ${next.inDays === 1 ? 'tomorrow' : fmtWeekday(next.date)}` : 'Enjoy it'}</span></span></div>`
+  return html`<section class="card week-card">
+    <div class="week-head"><button class="circle-btn plain" aria-label="Previous week" onClick=${() => setOffset(offset - 1)}><${Icon} name="left" /></button>
+      <span class="muted">${offset === 0 ? 'This week' : offset === -1 ? 'Last week' : offset === 1 ? 'Next week' : fmtDate(days[0])}</span>
+      <button class="circle-btn plain" aria-label="Next week" onClick=${() => setOffset(offset + 1)}><${Icon} name="right" /></button></div>
+    <div class="week-strip">${days.map(d => html`<button class=${'wday' + (d === today() ? ' today' : '') + (d === sel ? ' sel' : '')} onClick=${() => setSel(d)} aria-label=${fmtWeekday(d) + ' ' + fmtDate(d)}>
+      <small>${DAY_SHORT[new Date(d + 'T12:00:00').getDay()]}</small><b>${+d.slice(8)}</b>
+      <span class=${'wdot' + (trained.has(d) ? ' trained' : planned(d) ? ' planned' : '')}></span></button>`)}</div>
+    ${body}
+  </section>`
+}
+
+function WeightCard({ app }) {
+  const { profile } = app.state
+  const last = latestBodyweight(profile)
   const [kg, setKg] = useState(last || 80)
+  const [open, setOpen] = useState(false)
   useEffect(() => { if (last) setKg(last) }, [last])
-  const todays = app.state.profile.weighins.find(w => w.date === today())
+  const sorted = [...(profile.weighins || [])].sort((a, b) => a.date.localeCompare(b.date))
+  const prev = sorted[sorted.length - 2]
+  const goal = profile.settings.goalWeight
   const save = e => {
     e.preventDefault()
     const v = parseFloat(String(kg).replace(',', '.'))
     if (!(v > 20 && v < 400)) return
     app.update(s => ({ ...s, profile: { ...s.profile, weighins: [...s.profile.weighins.filter(w => w.date !== today()), { date: today(), kg: v }] } }), ['profile'])
-    app.toast('Weight logged')
+    setOpen(false); app.toast('Weight logged')
   }
-  const sorted = [...app.state.profile.weighins].sort((a, b) => a.date.localeCompare(b.date))
-  const weekAgo = sorted.filter(w => w.date <= new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10)).pop()
-  const delta = last && weekAgo ? last - weekAgo.kg : null
-  return html`<section class="panel weigh">
-    <div class="panel-head"><h2 class="h2">Weight check</h2>${delta != null && html`<span class=${'delta ' + (delta > 0 ? 'up' : 'down')}>${delta > 0 ? '+' : ''}${fmt(Math.round(delta * 10) / 10)} kg this week</span>`}</div>
-    <form class="inline-form" onSubmit=${save}>
-      <input id="weigh-kg" class="input" inputmode="decimal" aria-label="Body weight in kilograms" value=${kg} onInput=${e => setKg(e.target.value)} />
-      <span>kg</span>
-      <button class="btn primary">${todays ? 'Update today' : 'Log today'}</button>
-    </form>
-    ${todays && html`<p class="muted small">Logged ${fmt(todays.kg)} kg today. Weigh at the same time each morning for a cleaner trend.</p>`}
+  const recent = sorted.slice(-30)
+  const avg = rollingAverage(recent.map(w => w.kg), 7)
+  return html`<section class="card">
+    <div class="card-head"><p class="card-title">Body weight</p><div class="head-actions">${goal && html`<span class="goal-chip"><${Icon} name="target" size=${15} /> ${fmt(goal)}</span>`}<button class="text-btn" onClick=${() => setOpen(true)}><${Icon} name="plus" size=${16} /> Log</button></div></div>
+    ${last ? html`<div class="weight-big"><b>${fmt(last)}</b><span class="unit">kg</span>${prev && html`<span class=${'delta ' + (last - prev.kg <= 0 ? 'down' : 'up')}>${last - prev.kg <= 0 ? '↓' : '↑'} ${fmt(Math.abs(Math.round((last - prev.kg) * 10) / 10))}</span>`}<span class="muted small right">${fmtDate(sorted[sorted.length - 1].date)}</span></div>
+      ${goal && html`<p class="goal-line-text"><${Icon} name="target" size=${15} /> Goal ${fmt(goal)} kg · ${fmt(Math.abs(Math.round((last - goal) * 10) / 10))} kg to ${last > goal ? 'lose' : 'gain'}</p>`}
+      ${recent.length > 1 && html`<${LineChart} label="Body weight trend" height=${150} goal=${goal || null} series=${[{ className: 's-avg', area: true, points: recent.map((w, i) => ({ x: w.date, y: avg[i] })) }]} />`}`
+      : html`<p class="muted">Log your weight in the morning, before food. The trend matters more than any one day.</p>`}
+    <${Sheet} open=${open} title="Log weight" onClose=${() => setOpen(false)}>
+      <form class="inline-form big" onSubmit=${save}><input id="weigh-kg" class="input" inputmode="decimal" aria-label="Body weight in kilograms" value=${kg} onInput=${e => setKg(e.target.value)} /><span>kg</span><button class="btn primary">Save</button></form>
+    </${Sheet}>
   </section>`
 }
 
@@ -46,93 +83,43 @@ function TierSheet({ open, onClose, level }) {
   </${Sheet}>`
 }
 
-export function SettingsSheet({ open, onClose, app }) {
-  const s = app.state.profile.settings
-  const set = patch => app.update(st => ({ ...st, profile: { ...st.profile, settings: { ...st.profile.settings, ...patch } } }), ['profile'])
-  const [json, setJson] = useState('')
-  const [msg, setMsg] = useState('')
-  const [pending, setPending] = useState(null)
-  const standalone = isStandalone()
-  const stamp = () => app.update(st => ({ ...st, profile: { ...st.profile, lastBackup: today() } }), ['profile'])
-  const exportData = async () => {
-    const text = makeBackup(app.state)
-    if (standalone) { downloadFile(`power-level-backup-${today()}.json`, text); stamp(); setMsg('Backup saved to your downloads. Keep it somewhere safe, like Google Drive or iCloud.'); return }
-    try { await navigator.clipboard.writeText(text); stamp(); setMsg('Copied all your data to the clipboard.') } catch { setJson(text); setMsg('Select the text below and copy it.') }
-  }
-  const readBackup = text => {
-    try { const d = parseBackup(text); setPending(d); setMsg('') } catch { setPending(null); setMsg('That doesn’t look like a Power Level backup.') }
-  }
-  const onFile = e => {
-    const f = e.target.files?.[0]
-    e.target.value = ''
-    if (!f) return
-    if (f.size > 15e6) { setMsg('That file is too big to be a backup.'); return }
-    f.text().then(readBackup, () => setMsg('Couldn’t read that file.'))
-  }
-  const restore = () => { app.replaceAll(pending); setPending(null); setJson(''); setMsg('Restored from backup.') }
-  const num = (k, label, hint) => html`<${Field} label=${label} hint=${hint}><input id=${'set-' + k} class="input" inputmode="decimal" value=${s[k] ?? ''} onChange=${e => set({ [k]: parseFloat(e.target.value) || null })} /></${Field}>`
-  return html`<${Sheet} open=${open} title="Settings" onClose=${onClose}>
-    <div class="stack">
-      <h3 class="h3">You</h3>
-      <${Chips} small label="Sex" value=${s.sex} onChange=${v => set({ sex: v })} options=${[{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]} />
-      <div class="row-2">${num('age', 'Age')}${num('height', 'Height (cm)')}</div>
-      ${num('goalWeight', 'Goal body weight (kg)', 'Optional. Shown as a line on your weight chart.')}
-      <${Field} label="Activity"><select id="set-activity" class="input select" value=${s.activity} onChange=${e => set({ activity: e.target.value })}>${Object.entries(ACTIVITY).map(([v, a]) => html`<option value=${v}>${a.label}</option>`)}</select></${Field}>
-      <${Field} label="Energy unit" hint="Food is stored the same either way, so you can switch any time."><${Chips} small label="Energy unit" value=${energyUnitOf(s)} onChange=${v => set({ energy: v })} options=${Object.entries(ENERGY_UNITS).map(([value, label]) => ({ value, label }))} /></${Field}>
-      <${Field} label="Nutrition goal"><${Chips} small label="Nutrition goal" value=${s.goal} onChange=${v => set({ goal: v })} options=${Object.entries(GOALS).map(([v, g]) => ({ value: v, label: g.label }))} /></${Field}>
-      <h3 class="h3">Gym</h3>
-      <div class="row-2">${num('bar', 'Barbell (kg)')}${num('rest', 'Rest timer (sec)')}</div>
-      <${Field} label="Plates you have (kg)" hint="Comma separated. Used for the plate picture."><input id="set-plates" class="input" value=${(s.plates || []).join(', ')} onChange=${e => set({ plates: e.target.value.split(',').map(x => parseFloat(x)).filter(x => x > 0) })} /></${Field}>
-      <h3 class="h3">Your data</h3>
-      <p class="muted small">${app.mode === 'cloud' ? 'Saved to your account on this page. Only you can see it.' : 'Saved on this phone only, not online. Download a backup now and then so a lost phone or cleared browser doesn’t take your history with it.'}</p>
-      ${app.state.profile.lastBackup && html`<p class="muted small">Last backup: ${fmtDate(app.state.profile.lastBackup)}</p>`}
-      ${standalone ? html`<div class="row-btns">
-          <button class="btn primary" onClick=${exportData}>Download backup</button>
-          <label class="btn file-btn">Restore from file<input id="set-restore" type="file" accept="application/json,.json" onChange=${onFile} /></label>
-        </div>`
-        : html`<div class="row-btns"><button class="btn" onClick=${exportData}>Copy export</button><button class="btn" disabled=${!json.trim()} onClick=${() => readBackup(json)}>Import pasted data</button></div>
-        <textarea id="set-json" class="input" rows="3" placeholder="Paste an export here to import" value=${json} onInput=${e => setJson(e.target.value)}></textarea>`}
-      ${pending && html`<div class="callout"><p>This backup has <b>${pending.workouts.length} workouts</b>. Restoring replaces everything currently on this device.</p>
-        <div class="row-btns"><${ConfirmButton} class="btn primary" confirmText="Tap again to replace" onConfirm=${restore}>Restore it</${ConfirmButton}><button class="btn ghost" onClick=${() => setPending(null)}>Cancel</button></div></div>`}
-      ${msg && html`<p class="small" role="status">${msg}</p>`}
-      ${app.state.workouts.length === 0 && html`<button class="btn ghost" onClick=${() => { app.replaceAll(makeExampleData(app.state.profile)); onClose() }}>Load example data to explore</button>`}
-      ${app.state.profile.example && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to clear everything" onConfirm=${() => app.replaceAll({ profile: { ...app.state.profile, example: false, weighins: [], goals: [] }, workouts: [], food: {} })}>Clear example data</${ConfirmButton}>`}
-    </div>
-  </${Sheet}>`
-}
-
 export function HomeView({ app }) {
-  const { workouts, profile, food, active } = app.state
+  const { workouts, profile, food } = app.state
   const [tiers, setTiers] = useState(false)
-  const total = workouts.reduce((s, w) => s + workoutVolume(w), 0)
-  const cmp = liftedComparison(total)
   const tgt = dailyTargets(profile)
   const tot = sumEntries(food[today()])
   const unit = energyUnitOf(profile.settings)
-  const goals = profile.goals.filter(g => !g.achieved)
-  const last = [...workouts].sort((a, b) => b.date.localeCompare(a.date))[0]
+  const goals = (profile.goals || []).filter(g => !g.achieved)
+  const ws = profile.plan?.weekStart ?? 1
+  const streak = streakWeeks(workouts, today(), ws)
+  const thisWeek = workouts.filter(w => weekOf(today(), ws).includes(w.date)).length
+  const backupDue = isStandalone() && !profile.example && workouts.length >= 3 && daysSince(profile.lastBackup) >= 14
   return html`<div class="stack">
-    <${PowerCard} level=${app.power.level} tier=${app.power.tier} onTap=${() => setTiers(true)} />
-    ${isStandalone() && !profile.example && workouts.length >= 3 && daysSince(profile.lastBackup) >= 14 && html`<div class="callout"><span class="small">${profile.lastBackup ? `No backup for ${daysSince(profile.lastBackup)} days.` : 'You haven’t backed up yet.'} Your data lives only on this phone.</span>
-      <button class="btn small" onClick=${() => { downloadFile(`power-level-backup-${today()}.json`, makeBackup(app.state)); app.update(st => ({ ...st, profile: { ...st.profile, lastBackup: today() } }), ['profile']) }}>Download backup</button></div>`}
+    <${PageHead} title="Power Level" sub=${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}>
+      <button class="circle-btn" aria-label="Settings" onClick=${app.openSettings}><${Icon} name="settings" /></button>
+    </${PageHead}>
     ${profile.example && html`<p class="callout small">You're looking at example data. Clear it in Settings when you're ready to start.</p>`}
-    ${!profile.example && workouts.length === 0 && html`<div class="callout"><b>New here?</b><span class="small">Start a workout below, or look around with eight weeks of example training first. You can clear it any time.</span>
-      <button class="btn small" onClick=${() => app.replaceAll(makeExampleData(profile))}>Load example data</button></div>`}
-    <button class="btn primary wide big" onClick=${() => app.go('train')}>${active ? 'Resume workout' : 'Start workout'}</button>
-    ${last && html`<p class="muted small center">Last session: ${last.name}, ${fmtDate(last.date)} · ${formatKg(workoutVolume(last))}</p>`}
-    ${goals.length > 0 && html`<section class="panel"><div class="panel-head"><h2 class="h2">Goals</h2><button class="link" onClick=${() => app.go('goals')}>All goals</button></div>
+    ${!profile.example && workouts.length === 0 && html`<div class="callout"><b>New here?</b><span class="small">Load a starter plan in Plan, or look around with eight weeks of example training first.</span>
+      <div class="row-btns"><button class="btn small primary" onClick=${() => app.go('plan')}>Pick a plan</button><button class="btn small" onClick=${() => app.replaceAll(makeExampleData(profile))}>Example data</button></div></div>`}
+    ${backupDue && html`<div class="callout"><span class="small">${profile.lastBackup ? `No backup for ${daysSince(profile.lastBackup)} days.` : 'You haven’t backed up yet.'} Your data lives only on this phone.</span>
+      <button class="btn small" onClick=${() => { downloadFile(`power-level-backup-${today()}.json`, makeBackup(app.state)); app.update(st => ({ ...st, profile: { ...st.profile, lastBackup: today() } }), ['profile']) }}>Download backup</button></div>`}
+    <${WeekCard} app=${app} />
+    <${PowerCard} level=${app.power.level} tier=${app.power.tier} onTap=${() => setTiers(true)} />
+    <${WeightCard} app=${app} />
+    <section class="card streak" onClick=${() => app.go('stats')}>
+      <p class="streak-big"><${Icon} name="flame" size=${26} class="flame" /> ${streak} week streak</p>
+      <p class="muted">${thisWeek} this week · ${workouts.length} workouts total</p>
+    </section>
+    ${goals.length > 0 && html`<section class="card"><div class="card-head"><p class="card-title">Goals</p><button class="text-btn" onClick=${() => app.go('stats', 'strength')}>All</button></div>
       ${goals.map(g => { const j = journeyFor(g, workouts, profile, today()); const pct = percentThere(g.start, j.current, g.target); return html`<div class="goal-mini">
         <div><b>${exInfo(g.exId).name} → ${g.target} kg</b><span class="muted small">${fmt(j.current)} kg now · ${j.reachable ? 'ETA ' + fmtDate(j.etaDate) : 'long road'}</span></div>
         <div class="meter" role="progressbar" aria-valuenow=${pct} aria-valuemin="0" aria-valuemax="100" aria-label=${exInfo(g.exId).name + ' goal progress'}><span style=${{ width: pct + '%' }}></span></div></div>` })}
     </section>`}
-    <${WeighIn} app=${app} />
-    <section class="panel" onClick=${() => app.go('food')}>
-      <div class="panel-head"><h2 class="h2">Food today</h2><span class="muted small">${tgt ? `${fmtEnergy(Math.max(0, tgt.kcal - tot.kcal), unit)} left` : 'Set targets in Settings'}</span></div>
+    <section class="card" onClick=${() => app.go('food')}>
+      <div class="card-head"><p class="card-title">Food today</p><span class="muted small">${tgt ? `${fmtEnergy(Math.max(0, tgt.kcal - tot.kcal), unit)} left` : 'Set targets in Settings'}</span></div>
       <div class="macro-bars">${[[unit === 'kj' ? 'Energy' : 'Calories', toUnit(tot.kcal, unit), tgt && toUnit(tgt.kcal, unit), 'kcal'], ['Protein', tot.p, tgt?.protein, 'p'], ['Carbs', tot.c, tgt?.carbs, 'c'], ['Fat', tot.f, tgt?.fat, 'f']].map(([l, v, t, k]) => html`
         <div class="mb"><span>${l}</span><div class=${'meter m-' + k}><span style=${{ width: (t ? Math.min(100, (v / t) * 100) : 0) + '%' }}></span></div><span class="tnum">${Math.round(v)}${t ? ' / ' + t : ''}</span></div>`)}</div>
     </section>
-    ${total > 0 && html`<section class="panel lifted" onClick=${() => app.go('progress')}><p class="eyebrow">All-time lifted</p><p class="h2">${formatKg(total)}${cmp.best ? html` · ${cmp.times >= 10 ? Math.round(cmp.times) : cmp.times.toFixed(1)} × ${cmp.best.name.replace(/^an? /, '')}` : ''}</p>
-      ${cmp.next && html`<p class="muted small">Next up: ${cmp.next.name}</p>`}</section>`}
     <${TierSheet} open=${tiers} onClose=${() => setTiers(false)} level=${app.power.level} />
   </div>`
 }

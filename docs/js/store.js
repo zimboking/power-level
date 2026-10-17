@@ -7,11 +7,13 @@
 const LOCAL_KEY = 'powerlevel.v1'
 
 export const emptyProfile = () => ({
-  settings: { sex: 'male', age: 28, height: 178, activity: 'moderate', goal: 'maintain', bar: 20, rest: 150, plates: [25, 20, 15, 10, 5, 2.5, 1.25] },
+  settings: { sex: 'male', age: 28, height: 178, activity: 'moderate', goal: 'maintain', rest: 150, plates: [25, 20, 15, 10, 5, 2.5, 1.25], bars: { barbell: 20, ez: 10, trap: 25, smith: 15 }, effort: 'rir', showEffort: true, view: 'focus', restFlash: false },
   weighins: [],
   goals: [],
   templates: [],
   customFoods: [],
+  exercises: {},
+  plan: null,
 })
 
 function readLocal() {
@@ -45,7 +47,8 @@ export async function loadAll() {
   try { conn = await connect() } catch { conn = null }
   if (!conn) {
     const local = readLocal() || {}
-    return { mode: 'local', conn: null, profile: { ...emptyProfile(), ...local.profile }, workouts: local.workouts || [], food: local.food || {}, active: local.active || null }
+    const lp = local.profile || {}
+    return { mode: 'local', conn: null, profile: { ...emptyProfile(), ...lp, settings: { ...emptyProfile().settings, ...(lp.settings || {}) } }, workouts: local.workouts || [], food: local.food || {}, active: local.active || null }
   }
   const [p, ws, fs] = await Promise.all([
     retryOnce(() => conn.root.get()),

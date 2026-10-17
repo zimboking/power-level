@@ -42,10 +42,11 @@ function Dial({ left, total, size }) {
   </svg>`
 }
 
-export function RestTimer({ timer, setTimer, sound, onToggleSound }) {
+export function RestTimer({ timer, setTimer, sound, flash, onToggleSound }) {
   const [now, setNow] = useState(Date.now())
   const [big, setBig] = useState(false)
   const lastBeep = useRef(null)
+  const [flashing, setFlashing] = useState(false)
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t) }, [])
   const left = timeLeft(timer, now)
   const paused = timer.pausedLeft != null
@@ -58,6 +59,7 @@ export function RestTimer({ timer, setTimer, sound, onToggleSound }) {
     if (left === 0) {
       if (sound) { beep(990, 220); setTimeout(() => beep(990, 320), 280) }
       try { navigator.vibrate?.([250, 120, 250]) } catch { /* no vibration */ }
+      if (flash) { setFlashing(true); setTimeout(() => setFlashing(false), 2600) }
     }
   }, [left, paused])
 
@@ -67,7 +69,8 @@ export function RestTimer({ timer, setTimer, sound, onToggleSound }) {
     ${!done && html`<button class="btn small" onClick=${() => setTimer(togglePause(timer))}>${paused ? 'Resume' : 'Pause'}</button>`}
     <button class="btn small ghost" onClick=${() => setTimer(null)}>${done ? 'Close' : 'Skip'}</button>`
 
-  if (big) return html`<div class=${'rest-full' + (done ? ' go' : '')} role="timer" aria-live="polite" aria-label="Rest timer">
+  const flashEl = flashing && html`<div class="rest-flash" aria-hidden="true"></div>`
+  if (big) return html`${flashEl}<div class=${'rest-full' + (done ? ' go' : '')} role="timer" aria-live="polite" aria-label="Rest timer">
     <button class="icon-btn rest-shrink" aria-label="Shrink timer" onClick=${() => setBig(false)}>⌄</button>
     <p class="eyebrow">${done ? 'Rest over' : paused ? 'Paused' : 'Resting'}</p>
     <div class="rest-full-dial"><${Dial} left=${left} total=${timer.total} size=${240} /><span class="rest-full-time tnum">${done ? 'GO' : fmtClock(left)}</span></div>
@@ -76,7 +79,7 @@ export function RestTimer({ timer, setTimer, sound, onToggleSound }) {
     <label class="toggle"><input id="rest-sound" type="checkbox" checked=${sound} onChange=${onToggleSound} /> Beep at the end</label>
   </div>`
 
-  return html`<div class=${'rest-bar' + (done ? ' go' : '')} role="timer" aria-live="polite" aria-label="Rest timer">
+  return html`${flashEl}<div class=${'rest-bar' + (done ? ' go' : '')} role="timer" aria-live="polite" aria-label="Rest timer">
     <button class="rest-open" aria-label="Expand timer" onClick=${() => setBig(true)}>
       <span class="rest-mini"><${Dial} left=${left} total=${timer.total} size=${40} /></span>
       <span class="rest-time tnum">${done ? 'Go!' : fmtClock(left)}</span>

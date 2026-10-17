@@ -1,10 +1,13 @@
-// The workout tab: start (template + how you feel), log, rest timer, finish summary.
-import { html, useState, useMemo, Sheet, Chips, Field, fmt, ConfirmButton } from './core.js'
+// The session screen. Guided (one exercise at a time with its demo) or list view. Used live,
+// and to edit a saved workout or log one you did on paper.
+import { html, useState, useEffect, Icon, Sheet, Field, Chips, Toggle, ActionSheet, fmt, fmtClock, fmtWeekday } from './core.js'
 import { ExerciseCard } from './exercise-card.js'
-import { EXERCISES, MUSCLES, STARTER_TEMPLATES, exInfo } from '../exercises.js'
+import { LibrarySheet } from './library.js'
 import { buildEntry, bestEverE1rm, DEFAULT_CFG } from '../plan.js'
 import { FEELINGS, workoutVolume, bestE1rm } from '../strength.js'
 import { liftedComparison, formatKg } from '../power.js'
+import { exInfo } from '../exercises.js'
+import { plannedFor, nextSession } from '../schedule.js'
 import { uid, today } from '../store.js'
 import { primeAudio } from './rest.js'
 
@@ -15,8 +18,7 @@ export function supersetLabels(entries) {
   let letter = 0
   for (let i = 0; i < entries.length; i++) {
     const g = entries[i].group
-    if (!g) continue
-    if (i > 0 && entries[i - 1].group === g) continue
+    if (!g || (i > 0 && entries[i - 1].group === g)) continue
     const run = []
     for (let j = i; j < entries.length && entries[j].group === g; j++) run.push(j)
     if (run.length < 2) continue
@@ -26,141 +28,207 @@ export function supersetLabels(entries) {
   return labels
 }
 
-function ExercisePicker({ open, onClose, onPick }) {
-  const [q, setQ] = useState('')
-  const [muscle, setMuscle] = useState('All')
-  const list = EXERCISES.filter(e => (muscle === 'All' || e.muscle === muscle) && e.name.toLowerCase().includes(q.trim().toLowerCase()))
-  return html`<${Sheet} open=${open} title="Add exercise" onClose=${onClose}>
-    <input id="ex-search" class="input" placeholder="Search exercises" value=${q} onInput=${e => setQ(e.target.value)} />
-    <${Chips} small label="Muscle" value=${muscle} onChange=${setMuscle} options=${['All', ...MUSCLES].map(m => ({ value: m, label: m }))} />
-    <ul class="pick-list">${list.map(e => html`<li><button onClick=${() => { onPick(e.id); setQ('') }}><b>${e.name}</b><span>${e.muscle} · ${e.eq}</span></button></li>`)}</ul>
-  </${Sheet}>`
+export function newSession(app, routine, { feeling = 'great', note = '', warm = true, date = today() } = {}) {
+  const { workouts, profile } = app.state
+  const ctx = { workouts, profile, feeling, todayIso: date, withWarmups: warm }
+  const entries = (routine?.items || []).map(it => buildEntry({ ...ctx, exId: it.exId, cfg: { ...DEFAULT_CFG, ...it }, group: it.group ? 'g-' + it.group : null }))
+  return { id: uid(), date, startedAt: Date.now(), feeling, note, name: routine?.name || 'Workout', routineId: routine?.id || null, entries, focus: 0 }
 }
 
-function StartScreen({ app }) {
-  const { profile } = app.state
+// A saved workout opened for editing: every set is shown as done, targets read "as logged".
+export function sessionFromWorkout(w) {
+  return {
+    ...w, editing: true, focus: 0,
+    entries: w.entries.map(e => ({ key: Math.random().toString(36).slice(2, 9), exId: e.exId, group: e.group || null, cfg: { ...DEFAULT_CFG, ...(e.cfg || {}) }, target: e.target || { kind: 'hold', why: 'As logged.' }, sets: e.sets.map(s => ({ ...s, done: true, auto: false })), advice: null })),
+  }
+}
+
+export function toWorkout(session) {
+  const entries = session.entries
+    .map(e => ({ exId: e.exId, group: e.group, cfg: e.cfg, target: { w: e.target.w, r: e.target.r, sec: e.target.sec, sets: e.target.sets, kind: e.target.kind }, sets: e.sets.filter(s => s.done).map(({ auto, ...s }) => s) }))
+    .filter(e => e.sets.length)
+  const durationMin = session.editing ? session.durationMin || 0 : Math.round((Date.now() - session.startedAt) / 60000)
+  return { id: session.id, date: session.date, name: session.name, routineId: session.routineId || null, feeling: session.feeling, note: session.note || '', durationMin, entries }
+}
+
+export function StartSheet({ open, onClose, app, routine, onStart }) {
   const [feeling, setFeeling] = useState('great')
   const [note, setNote] = useState('')
   const [warm, setWarm] = useState(true)
-  const templates = [...(profile.templates || []), ...STARTER_TEMPLATES]
-  const start = tpl => {
-    const ctx = { workouts: app.state.workouts, profile, feeling, todayIso: today(), withWarmups: warm }
-    const entries = (tpl?.items || []).map(it => buildEntry({ ...ctx, exId: it.exId, cfg: { ...DEFAULT_CFG, ...it }, group: it.group ? 'g' + it.group : null }))
-    app.update(s => ({ ...s, active: { id: uid(), date: today(), startedAt: Date.now(), feeling, note, name: tpl?.name || 'Workout', entries } }), ['profile'])
-  }
-  return html`<div class="stack">
-    <section class="panel">
-      <h2 class="h2">How are you feeling today?</h2>
-      <p class="muted">Not 100 %? The app eases today's weights so you still get a good session. It's also marked on your graphs.</p>
+  const [pick, setPick] = useState(routine?.id || '')
+  useEffect(() => { if (open) setPick(routine?.id || '') }, [open, routine?.id])
+  const routines = app.state.profile.templates || []
+  return html`<${Sheet} open=${open} title="Start workout" onClose=${onClose}>
+    <div class="group"><div class="pad stack">
+      <p class="section-label">How are you feeling?</p>
       <${Chips} label="Feeling" value=${feeling} onChange=${setFeeling} options=${FEELING_OPTS} />
-      <${Field} label="Notes (optional)"><input id="start-note" class="input" placeholder="e.g. head cold, slept 5 hours" value=${note} onInput=${e => setNote(e.target.value)} /></${Field}>
-      <label class="toggle"><input id="start-warm" type="checkbox" checked=${warm} onChange=${e => setWarm(e.target.checked)} /> Add warm-up sets to barbell lifts</label>
-    </section>
-    <section class="panel">
-      <h2 class="h2">Start a workout</h2>
-      <div class="tpl-grid">
-        ${templates.map(t => html`<button class="tpl" onClick=${() => start(t)}><b>${t.name}</b><span>${t.items.map(i => exInfo(i.exId).name).join(' · ')}</span></button>`)}
-        <button class="tpl ghost" onClick=${() => start(null)}><b>Empty workout</b><span>Add exercises as you go</span></button>
-      </div>
-    </section>
-  </div>`
+      ${feeling !== 'great' && html`<p class="muted small">Today's loads ease off by ${Math.round((1 - FEELINGS[feeling].factor) * 100)} % and the session is marked on your graphs.</p>`}
+      <input id="start-note" class="input" placeholder="Note (optional): head cold, 5 hours sleep…" value=${note} onInput=${e => setNote(e.target.value)} />
+    </div></div>
+    <p class="section-label">Routine</p>
+    <div class="group">
+      ${routines.map(r => html`<button class=${'row-btn' + (pick === r.id ? ' on' : '')} onClick=${() => setPick(r.id)}><span class="row-main"><span>${r.name}${routine?.id === r.id ? ' · today' : ''}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span>${pick === r.id && html`<${Icon} name="check" />`}</button>`)}
+      <button class=${'row-btn' + (pick === '' ? ' on' : '')} onClick=${() => setPick('')}><span class="row-main"><span>Empty workout</span><small>Add exercises as you go</small></span>${pick === '' && html`<${Icon} name="check" />`}</button>
+    </div>
+    <div class="group"><${Toggle} id="start-warm" checked=${warm} onChange=${setWarm} label="Add warm-up sets" hint="Ramp-up sets for barbell lifts, worked out from your first working weight." /></div>
+    <button class="btn primary big" onClick=${() => { primeAudio(); onStart(routines.find(r => r.id === pick) || null, { feeling, note, warm }) }}>Start</button>
+  </${Sheet}>`
 }
 
 function Summary({ result, onDone }) {
   const cmp = liftedComparison(result.volume)
-  return html`<section class="panel summary">
-    <p class="eyebrow">Workout saved</p>
-    <h2 class="h1">${formatKg(result.volume)} lifted</h2>
-    ${cmp.best ? html`<p class="big-compare">That's <b>${cmp.times >= 10 ? Math.round(cmp.times) : cmp.times.toFixed(1)} × ${cmp.best.name.replace(/^an? /, '')}</b>.</p>` : html`<p class="big-compare">Every kilo counts.</p>`}
-    ${result.prs.length > 0 && html`<div class="pr-list"><p class="eyebrow">New records</p>${result.prs.map(p => html`<p><span class="pr">PR</span> ${p.name}: ≈ ${fmt(p.e1rm)} kg 1RM</p>`)}</div>`}
-    <p class="muted">Power level ${result.before.toLocaleString()} → <b>${result.after.toLocaleString()}</b></p>
-    <button class="btn primary" onClick=${onDone}>Done</button>
-  </section>`
-}
-
-export function WorkoutView({ app }) {
-  const { active, workouts, profile } = app.state
-  const [picker, setPicker] = useState(false)
-  const [result, setResult] = useState(null)
-  const [saveTpl, setSaveTpl] = useState(false)
-  const bests = useMemo(() => Object.fromEntries((active?.entries || []).map(e => [e.exId, bestEverE1rm(workouts, e.exId)])), [workouts, active?.entries.length])
-
-  if (result) return html`<${Summary} result=${result} onDone=${() => { setResult(null); app.go('home') }} />`
-  if (!active) return html`<${StartScreen} app=${app} />`
-
-  const labels = supersetLabels(active.entries)
-  const setEntries = entries => app.update(s => ({ ...s, active: { ...s.active, entries } }), ['profile'])
-  const replace = (i, e) => setEntries(active.entries.map((x, j) => (j === i ? e : x)))
-  const move = (i, d) => {
-    const j = i + d
-    if (j < 0 || j >= active.entries.length) return
-    const next = [...active.entries];[next[i], next[j]] = [next[j], next[i]]
-    setEntries(next)
-  }
-  const toggleSuperset = i => {
-    const cur = active.entries[i], nxt = active.entries[i + 1]
-    if (!nxt) return
-    const linked = cur.group && cur.group === nxt.group
-    const g = linked ? null : cur.group || 'g' + uid()
-    setEntries(active.entries.map((e, j) => (j === i + 1 ? { ...e, group: g } : j === i && !linked ? { ...e, group: g } : e)))
-  }
-  const onSetDone = (entry, set) => {
-    const i = active.entries.findIndex(e => e.key === entry.key)
-    const nxt = active.entries[i + 1]
-    if (entry.group && nxt && nxt.group === entry.group) return // superset: rest after the last exercise of the pair
-    app.startRest(set.warmup ? 60 : entry.cfg.rest || profile.settings.rest || 150)
-  }
-  const add = exId => {
-    setPicker(false)
-    setEntries([...active.entries, buildEntry({ exId, cfg: DEFAULT_CFG, workouts, profile, feeling: active.feeling, todayIso: active.date, withWarmups: false })])
-  }
-  const finish = () => {
-    const entries = active.entries
-      .map(e => ({ exId: e.exId, group: e.group, cfg: e.cfg, sets: e.sets.filter(s => s.done).map(({ auto, ...s }) => s) }))
-      .filter(e => e.sets.length)
-    const before = app.power.level
-    const w = { id: active.id, date: active.date, name: active.name, feeling: active.feeling, note: active.note || '', durationMin: Math.round((Date.now() - active.startedAt) / 60000), entries }
-    const prs = entries.map(e => ({ name: exInfo(e.exId).name, e1rm: bestE1rm(e), prev: bests[e.exId] || 0 })).filter(p => p.e1rm && p.prev > 0 && p.e1rm > p.prev)
-    app.update(s => ({ ...s, active: null, workouts: entries.length ? [...s.workouts, w] : s.workouts }), ['profile', 'w:' + w.id])
-    app.stopRest()
-    if (entries.length) setResult({ volume: workoutVolume(w), prs, before, after: app.powerAfter([...workouts, w]) })
-  }
-  const saveTemplate = name => {
-    const items = active.entries.map(e => ({ exId: e.exId, sets: e.sets.filter(s => !s.warmup).length || e.cfg.sets, repsMin: e.cfg.repsMin, repsMax: e.cfg.repsMax, rir: e.cfg.rir, rest: e.cfg.rest, group: e.group ? e.group : undefined }))
-    app.update(s => ({ ...s, profile: { ...s.profile, templates: [{ id: uid(), name, items }, ...(s.profile.templates || [])] } }), ['profile'])
-    setSaveTpl(false)
-    app.toast('Template saved')
-  }
-
-  const doneSets = active.entries.reduce((n, e) => n + e.sets.filter(s => s.done && !s.warmup).length, 0)
-  return html`<div class="stack">
-    <section class="session-head">
-      <div><p class="eyebrow">${FEELINGS[active.feeling]?.label}${active.note ? ' · ' + active.note : ''}</p><h2 class="h1">${active.name}</h2></div>
-      <div class="session-meta"><p class="muted small">${doneSets} sets done · ${formatKg(workoutVolume({ entries: active.entries }))}</p>
-        ${!app.resting && html`<button class="btn small" onClick=${() => { primeAudio(); app.startRest(profile.settings.rest || 150) }}>⏱ Start rest</button>`}</div>
-    </section>
-    ${active.entries.length === 0 && html`<p class="muted">Add your first exercise. Targets, warm-ups and plates are worked out for you.</p>`}
-    ${active.entries.map((e, i) => html`<${ExerciseCard} key=${e.key} entry=${e} index=${i} label=${labels[e.key]} settings=${profile.settings}
-      prevBest=${bests[e.exId]} onChange=${ne => replace(i, ne)} onSetDone=${onSetDone}
-      onRemove=${() => setEntries(active.entries.filter((_, j) => j !== i))} onMove=${d => move(i, d)}
-      isLinked=${!!e.group && active.entries[i + 1]?.group === e.group} onToggleSuperset=${() => toggleSuperset(i)} />`)}
-    <button class="btn wide" onClick=${() => setPicker(true)}>+ Add exercise</button>
-    <div class="row-btns">
-      <button class="btn primary grow" onClick=${finish}>Finish & save</button>
-      <button class="btn" onClick=${() => setSaveTpl(true)} disabled=${!active.entries.length}>Save as template</button>
-    </div>
-    <${ConfirmButton} class="btn ghost" confirmText="Tap again to discard" onConfirm=${() => { app.update(s => ({ ...s, active: null }), ['profile']); app.stopRest() }}>Discard workout</${ConfirmButton}>
-    <${ExercisePicker} open=${picker} onClose=${() => setPicker(false)} onPick=${add} />
-    <${TemplateSheet} open=${saveTpl} defaultName=${active.name} onClose=${() => setSaveTpl(false)} onSave=${saveTemplate} />
+  return html`<div class="stack summary">
+    <div class="card hero-card"><p class="eyebrow">Workout saved</p>
+      <p class="big-num">${formatKg(result.volume)}</p>
+      <p>${cmp.best ? html`That's <b>${cmp.times >= 10 ? Math.round(cmp.times) : cmp.times.toFixed(1)} × ${cmp.best.name.replace(/^an? /, '')}</b>.` : 'Every kilo counts.'}</p>
+      <p class="muted small">${result.sets} sets · ${result.minutes} min · power level ${result.before.toLocaleString()} → <b>${result.after.toLocaleString()}</b></p></div>
+    ${result.prs.length > 0 && html`<div class="card"><p class="section-label">New records</p>${result.prs.map(p => html`<p class="pr-line"><span class="pr">PR</span> ${p.name}: ≈ ${fmt(p.e1rm)} kg 1RM <span class="muted">(was ${fmt(p.prev)})</span></p>`)}</div>`}
+    ${result.next && html`<p class="muted center">Next up: <b>${result.next.routine.name}</b> on ${fmtWeekday(result.next.date)}.</p>`}
+    <button class="btn primary big" onClick=${onDone}>Done</button>
   </div>`
 }
 
-function TemplateSheet({ open, defaultName, onClose, onSave }) {
-  const [name, setName] = useState(defaultName)
-  return html`<${Sheet} open=${open} title="Save as template" onClose=${onClose}>
-    <form class="stack" onSubmit=${e => { e.preventDefault(); if (name.trim()) onSave(name.trim()) }}>
-      <${Field} label="Template name"><input id="tpl-name" class="input" value=${name} onInput=${e => setName(e.target.value)} /></${Field}>
-      <button class="btn primary">Save template</button>
-    </form>
-  </${Sheet}>`
+function Elapsed({ since }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  return html`<span class="tnum">${fmtClock(Math.max(0, Math.floor((now - since) / 1000)))}</span>`
+}
+
+export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onClose }) {
+  const { workouts, profile } = app.state
+  const view = profile.settings.view === 'list' ? 'list' : 'focus'
+  const [picker, setPicker] = useState(null) // { swap?: index }
+  const [menu, setMenu] = useState(false)
+  const [demoMin, setDemoMin] = useState(false)
+  const [rename, setRename] = useState(false)
+  const entries = session.entries
+  const focus = Math.min(session.focus || 0, Math.max(0, entries.length - 1))
+  const labels = supersetLabels(entries)
+  const set = patch => onChange({ ...session, ...patch })
+  const setEntries = (list, extra = {}) => set({ entries: list, ...extra })
+  const replace = (i, e) => setEntries(entries.map((x, j) => (j === i ? e : x)))
+  const goTo = i => { set({ focus: Math.max(0, Math.min(entries.length - 1, i)) }); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  const move = (i, d) => {
+    const j = i + d
+    if (j < 0 || j >= entries.length) return
+    const next = [...entries];[next[i], next[j]] = [next[j], next[i]]
+    setEntries(next, { focus: j })
+  }
+  const toggleSuperset = i => {
+    const cur = entries[i], nxt = entries[i + 1]
+    if (!nxt) return
+    const linked = cur.group && cur.group === nxt.group
+    const g = linked ? null : cur.group || 'g' + uid()
+    setEntries(entries.map((e, j) => (j === i + 1 ? { ...e, group: g } : j === i && !linked ? { ...e, group: g } : e)))
+  }
+  const onSetDone = (entry, doneSet) => {
+    if (session.editing) return
+    const i = entries.findIndex(e => e.key === entry.key)
+    const group = entry.group ? entries.map((e, j) => ({ e, j })).filter(x => x.e.group === entry.group) : []
+    const pos = group.findIndex(x => x.j === i)
+    if (group.length > 1 && pos < group.length - 1) { if (view === 'focus') goTo(group[pos + 1].j); return } // superset: straight to the partner
+    if (group.length > 1 && view === 'focus') setTimeout(() => goTo(group[0].j), 300)
+    app.startRest(doneSet.warmup ? 60 : doneSet.rest || entry.cfg.rest || profile.settings.rest || 150)
+    // `entry` is the state before this tick, so "all done" means at most this one set was left.
+    const allDone = !doneSet.warmup && entry.sets.filter(s => !s.warmup && !s.done).length <= 1
+    if (view === 'focus' && group.length < 2 && allDone && i < entries.length - 1) setTimeout(() => app.toast({ text: `${exInfo(entry.exId).name} done`, action: { label: 'Next exercise', run: () => goTo(i + 1) } }), 50)
+  }
+  const add = exId => {
+    const e = buildEntry({ exId, cfg: DEFAULT_CFG, workouts, profile, feeling: session.feeling, todayIso: session.date, withWarmups: false })
+    if (picker?.swap != null) { const i = picker.swap; setEntries(entries.map((x, j) => (j === i ? { ...e, group: x.group } : x)), { focus: i }) }
+    else setEntries([...entries, e], { focus: entries.length })
+    setPicker(null)
+  }
+  const saveRoutine = () => {
+    const items = entries.map(e => ({ exId: e.exId, sets: e.sets.filter(s => !s.warmup).length || e.cfg.sets, repsMin: e.cfg.repsMin, repsMax: e.cfg.repsMax, rir: e.cfg.rir, rest: e.cfg.rest, prog: e.cfg.prog, group: e.group ? e.group.replace(/^g-?/, '') : undefined,
+      ...(e.cfg.pyramid ? { pyramid: true, pyramidSets: e.sets.filter(s => !s.warmup).map(s => ({ w: s.w, r: s.r, rest: s.rest })) } : {}) }))
+    const existing = profile.templates.find(t => t.id === session.routineId)
+    app.update(s => ({ ...s, profile: { ...s.profile, templates: existing ? s.profile.templates.map(t => (t.id === existing.id ? { ...t, items } : t)) : [{ id: 'r' + uid(), name: session.name, items }, ...s.profile.templates] } }), ['profile'])
+    app.toast(existing ? `Updated routine “${existing.name}”` : 'Saved as a routine')
+  }
+  const total = entries.reduce((n, e) => n + e.sets.filter(s => !s.warmup).length, 0)
+  const done = entries.reduce((n, e) => n + e.sets.filter(s => s.done && !s.warmup).length, 0)
+  const card = (e, i) => html`<${ExerciseCard} key=${e.key} entry=${e} index=${i} count=${entries.length} label=${labels[e.key]} app=${app} view=${view}
+    onChange=${ne => replace(i, ne)} onSetDone=${onSetDone} onRemove=${() => setEntries(entries.filter((_, j) => j !== i), { focus: Math.max(0, i - 1) })} onMove=${d => move(i, d)}
+    isLinked=${!!e.group && entries[i + 1]?.group === e.group} onToggleSuperset=${() => toggleSuperset(i)} onSwap=${() => setPicker({ swap: i })}
+    demoMin=${demoMin} onToggleDemo=${() => setDemoMin(!demoMin)} />`
+
+  return html`<div class="session">
+    <header class="session-bar">
+      <button class="circle-btn" aria-label=${session.editing ? 'Cancel editing' : 'Back to home'} onClick=${onClose}><${Icon} name=${session.editing ? 'x' : 'down'} /></button>
+      <button class="session-title" onClick=${() => setRename(true)}><b>${session.name}</b><span>${session.editing ? fmtWeekday(session.date) + ' · editing' : html`<${Elapsed} since=${session.startedAt} /> · ${done}/${total} sets`}</span></button>
+      <button class="circle-btn" aria-label="Workout options" onClick=${() => setMenu(true)}><${Icon} name="more" /></button>
+      <button class="circle-btn go" aria-label=${session.editing ? 'Save changes' : 'Finish workout'} onClick=${onFinish}><${Icon} name="check" /></button>
+    </header>
+    <div class="progress" role="progressbar" aria-valuenow=${done} aria-valuemin="0" aria-valuemax=${total} aria-label="Sets done"><span style=${{ width: (total ? (done / total) * 100 : 0) + '%' }}></span></div>
+    ${session.feeling && session.feeling !== 'great' && html`<p class="feeling-note">${FEELINGS[session.feeling].label}: loads eased today.${session.note ? ' “' + session.note + '”' : ''}</p>`}
+    ${session.editing && html`<div class="group"><label class="toggle-row" for="edit-date"><span class="row-main"><span>Date</span><small>Move it to the day you trained</small></span><input id="edit-date" type="date" class="input date-input" value=${session.date} max=${today()} onChange=${e => e.target.value && set({ date: e.target.value })} /></label></div>`}
+
+    ${entries.length === 0 && html`<div class="card empty"><p class="empty-title">Add your first exercise</p><p class="empty-body">Targets, warm-ups, plates and rest are worked out for you.</p></div>`}
+    ${view === 'focus' && entries.length > 0 && html`
+      <nav class="ex-strip" aria-label="Exercises">${entries.map((e, i) => {
+        const w = e.sets.filter(s => !s.warmup), d = w.filter(s => s.done).length
+        return html`<button class=${'strip-chip' + (i === focus ? ' on' : '') + (w.length && d === w.length ? ' complete' : '')} onClick=${() => goTo(i)}>${labels[e.key] ? html`<b>${labels[e.key]}</b> ` : ''}${exInfo(e.exId).name}<small>${d}/${w.length}</small></button>`
+      })}</nav>
+      ${card(entries[focus], focus)}
+      <div class="focus-nav">
+        <button class="btn" disabled=${focus === 0} onClick=${() => goTo(focus - 1)}><${Icon} name="left" size=${18} /> Previous</button>
+        ${focus < entries.length - 1 ? html`<button class="btn primary" onClick=${() => goTo(focus + 1)}>Next <${Icon} name="right" size=${18} /></button>` : html`<button class="btn primary" onClick=${onFinish}>${session.editing ? 'Save' : 'Finish'} <${Icon} name="check" size=${18} /></button>`}
+      </div>`}
+    ${view === 'list' && entries.map(card)}
+    <button class="btn wide" onClick=${() => setPicker({})}><${Icon} name="plus" size=${18} /> Add exercise</button>
+
+    <${ActionSheet} open=${menu} title=${session.name} onClose=${() => setMenu(false)} actions=${[
+      { label: 'Add exercise', icon: 'plus', onClick: () => setPicker({}) },
+      { label: view === 'focus' ? 'Show as list' : 'Guided view', icon: 'list', hint: 'Change the default in Settings', onClick: () => app.setSetting({ view: view === 'focus' ? 'list' : 'focus' }) },
+      !session.editing && { label: 'Rest timer', icon: 'timer', onClick: () => app.startRest(profile.settings.rest || 150) },
+      { label: 'Rename', icon: 'edit', onClick: () => setRename(true) },
+      entries.length > 0 && { label: session.routineId && profile.templates.some(t => t.id === session.routineId) ? 'Update the routine' : 'Save as routine', icon: 'copy', onClick: saveRoutine },
+      { label: session.editing ? 'Discard changes' : 'Discard workout', icon: 'trash', danger: true, onClick: onDiscard },
+    ]} />
+    <${Sheet} open=${rename} title="Workout name" onClose=${() => setRename(false)}>
+      <form class="stack" onSubmit=${e => { e.preventDefault(); setRename(false) }}>
+        <input id="session-name" class="input" value=${session.name} onInput=${e => set({ name: e.target.value })} />
+        <${Field} label="Note"><input id="session-note" class="input" value=${session.note || ''} onInput=${e => set({ note: e.target.value })} /></${Field}>
+        <${Field} label="Feeling"><${Chips} small label="Feeling" value=${session.feeling} onChange=${v => set({ feeling: v })} options=${FEELING_OPTS} /></${Field}>
+        <button class="btn primary">Done</button>
+      </form>
+    </${Sheet}>
+    <${LibrarySheet} open=${!!picker} title=${picker?.swap != null ? 'Swap exercise' : 'Add exercise'} onClose=${() => setPicker(null)} app=${app} onPick=${add} />
+  </div>`
+}
+
+// The centre tab: today's planned session, or a picker, or the live session itself.
+export function WorkoutTab({ app }) {
+  const { active, profile, workouts } = app.state
+  const [result, setResult] = useState(null)
+  const [starting, setStarting] = useState(false)
+  if (result) return html`<${Summary} result=${result} onDone=${() => { setResult(null); app.go('home') }} />`
+  if (active) {
+    const finish = () => {
+      const w = toWorkout(active)
+      app.stopRest()
+      if (!w.entries.length) { app.update(s => ({ ...s, active: null }), ['profile']); app.toast('Nothing logged, so nothing saved'); return }
+      const before = app.power.level
+      const prs = w.entries.map(e => ({ name: exInfo(e.exId).name, e1rm: bestE1rm(e), prev: bestEverE1rm(workouts, e.exId) })).filter(p => p.e1rm && p.prev > 0 && p.e1rm > p.prev)
+      const all = [...workouts, w]
+      app.update(s => ({ ...s, active: null, workouts: [...s.workouts, w] }), ['profile', 'w:' + w.id])
+      setResult({ volume: workoutVolume(w), sets: w.entries.reduce((n, e) => n + e.sets.filter(x => !x.warmup).length, 0), minutes: w.durationMin, prs, before, after: app.powerAfter(all), next: nextSession(profile, all, w.date) })
+    }
+    return html`<${SessionScreen} app=${app} session=${active} onChange=${s => app.update(st => ({ ...st, active: s }), ['profile'])}
+      onFinish=${finish} onDiscard=${() => { app.update(s => ({ ...s, active: null }), ['profile']); app.stopRest(); app.toast('Workout discarded') }} onClose=${() => app.go('home')} />`
+  }
+  const planned = plannedFor(profile, workouts, today())
+  const doneToday = workouts.some(w => w.date === today())
+  return html`<div class="stack">
+    <div class="card">
+      <p class="eyebrow">${planned ? 'Today' : 'No session planned today'}</p>
+      <p class="title-2">${planned ? planned.name : 'Train anyway?'}</p>
+      ${planned && html`<p class="muted small">${planned.items.map(i => exInfo(i.exId).name).join(' · ')}</p>`}
+      ${doneToday && html`<p class="muted small">You've already trained today.</p>`}
+      <button class="btn primary big" onClick=${() => setStarting(true)}>${planned ? 'Start ' + planned.name : 'Start a workout'}</button>
+    </div>
+    <${StartSheet} open=${starting} onClose=${() => setStarting(false)} app=${app} routine=${planned}
+      onStart=${(r, opts) => { setStarting(false); app.update(s => ({ ...s, active: newSession(app, r, opts) }), ['profile']) }} />
+  </div>`
 }

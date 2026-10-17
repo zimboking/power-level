@@ -1,124 +1,177 @@
-// One exercise inside the active workout: target, sets, live 1RM, smart next-set adjustment,
-// form cues and a plate-loading picture. All the maths happens here so you never do it.
-import { html, useState, fmt, Stepper } from './core.js'
+// One exercise inside a session: demo, muscles, last time, bar maths, why this target, and the
+// sets. The maths (1RM, next-set adjustment, plates, warm-ups) happens here so you never do it.
+import { html, useState, useEffect, fmt, fmtDate, fmtClock, Icon, ActionSheet, Sheet, WheelPicker } from './core.js'
+import { SetRow, EffortSheet } from './set-row.js'
+import { ExerciseDemo } from './media.js'
+import { ExerciseMuscles } from './bodymap.js'
 import { e1rm, nextSetAdvice, platesFor, warmupSets } from '../strength.js'
-import { exInfo, stepFor } from '../exercises.js'
-import { REST_PRESETS, fmtClock, primeAudio } from './rest.js'
+import { exInfo, stepFor, usesPlates, barWeight, BAR_TYPES, EQUIPMENT_NAMES, isTimed, isBodyweight, instructionsFor } from '../exercises.js'
+import { POLICIES, effortLabel } from '../progression.js'
+import { policyOf, lastTimeLine, bestEverE1rm } from '../plan.js'
+import { MUSCLE_NAME } from '../muscles.js'
+import { primeAudio } from './rest.js'
 
-const RIR_OPTS = [0, 1, 2, 3, 4]
-
-export function PlateBar({ weight, bar = 20, plates }) {
+export function PlateBar({ weight, bar = 20, plates, label = 'Barbell' }) {
   const { perSide, remainder, ok } = platesFor(weight, bar, plates)
   const colors = { 25: 'p25', 20: 'p20', 15: 'p15', 10: 'p10', 5: 'p5', 2.5: 'p2', 1.25: 'p1' }
   const hgt = p => (p >= 15 ? 54 : p >= 10 ? 46 : p >= 5 ? 36 : 28)
-  // Grip in the middle (x 106–194), collars at 98 and 194, plates stack outward from each collar.
   let x = 204
   const right = perSide.map(p => { const w = p >= 10 ? 11 : 7; const r = { p, x, w }; x += w + 2; return r })
   return html`<figure class="platebar">
-    <svg viewBox="0 0 300 64" role="img" aria-label=${`${weight} kg: ${perSide.join(', ') || 'empty bar'} each side`}>
+    <svg viewBox="0 0 300 64" role="img" aria-label=${`${weight} kg: ${perSide.join(', ') || 'nothing'} each side of a ${bar} kg ${label}`}>
       <rect x="4" y="29" width="292" height="6" rx="3" class="bar-steel" />
-      <rect x="96" y="22" width="8" height="20" rx="2" class="bar-collar" />
-      <rect x="196" y="22" width="8" height="20" rx="2" class="bar-collar" />
-      ${right.map(r => html`<rect x=${r.x} y=${32 - hgt(r.p) / 2} width=${r.w} height=${hgt(r.p)} rx="2" class=${'plate ' + colors[r.p]} />`)}
-      ${right.map(r => html`<rect x=${300 - r.x - r.w} y=${32 - hgt(r.p) / 2} width=${r.w} height=${hgt(r.p)} rx="2" class=${'plate ' + colors[r.p]} />`)}
+      <rect x="96" y="22" width="8" height="20" rx="2" class="bar-collar" /><rect x="196" y="22" width="8" height="20" rx="2" class="bar-collar" />
+      ${right.map(r => html`<rect x=${r.x} y=${32 - hgt(r.p) / 2} width=${r.w} height=${hgt(r.p)} rx="2" class=${'plate ' + (colors[r.p] || 'p1')} />`)}
+      ${right.map(r => html`<rect x=${300 - r.x - r.w} y=${32 - hgt(r.p) / 2} width=${r.w} height=${hgt(r.p)} rx="2" class=${'plate ' + (colors[r.p] || 'p1')} />`)}
     </svg>
-    <figcaption>${perSide.length ? html`Each side: <b>${perSide.join(' + ')}</b>` : 'Just the bar'}${!ok && remainder > 0 ? html` <span class="warn">(${fmt(remainder)} kg can’t be loaded)</span>` : ''}</figcaption>
+    <figcaption>${label} ${bar} kg · ${perSide.length ? html`each side <b>${perSide.join(' + ')}</b>` : 'no plates'}${!ok && remainder > 0 ? html` <span class="warn">(${fmt(remainder)} kg can’t be made with your plates)</span>` : ''}</figcaption>
   </figure>`
 }
 
-export function ExerciseCard({ entry, index, label, settings, prevBest, onChange, onSetDone, onRemove, onMove, onToggleSuperset, isLinked }) {
+function InfoSheet({ ex, open, onClose, sex }) {
+  const [ins, setIns] = useState(null)
+  useEffect(() => { if (open && ins == null) instructionsFor(ex).then(setIns) }, [open])
+  return html`<${Sheet} open=${open} title=${ex.name} onClose=${onClose} tall>
+    <${ExerciseMuscles} ex=${ex} sex=${sex} size="md" />
+    <p class="muted small center">${[...(ex.p || []).map(m => html`<b>${MUSCLE_NAME[m] || m}</b>`), ...(ex.s || []).map(m => MUSCLE_NAME[m] || m)].reduce((a, b, i) => (i ? [...a, ' · ', b] : [b]), [])}</p>
+    ${ex.cues?.length > 0 && html`<div class="card-flat"><p class="section-label">Think about</p><ol class="cues">${ex.cues.map(c => html`<li>${c}</li>`)}</ol></div>`}
+    ${ins?.length > 0 && html`<div class="card-flat"><p class="section-label">How to</p><ol class="cues">${ins.map(c => html`<li>${c}</li>`)}</ol></div>`}
+  </${Sheet}>`
+}
+
+export function ExerciseCard({ entry, label, index, count, app, view, onChange, onSetDone, onRemove, onMove, onToggleSuperset, isLinked, onSwap, demoMin, onToggleDemo }) {
+  const { profile, workouts } = app.state
+  const settings = profile.settings
   const ex = exInfo(entry.exId)
   const step = stepFor(ex)
-  const [showCues, setShowCues] = useState(false)
-  const [plateFor, setPlateFor] = useState(null)
+  const timed = isTimed(ex), bw = isBodyweight(ex)
+  const scale = settings.effort === 'rpe' ? 'rpe' : 'rir'
+  const showEffort = settings.showEffort !== false
+  const bar = barWeight(ex, settings)
+  const [menu, setMenu] = useState(false)
+  const [setMenuIdx, setSetMenuIdx] = useState(null)
+  const [effortIdx, setEffortIdx] = useState(null)
+  const [restFor, setRestFor] = useState(null) // 'exercise' | set index
+  const [progSheet, setProgSheet] = useState(false)
+  const [info, setInfo] = useState(false)
+  const [plateIdx, setPlateIdx] = useState(null)
+  const prevBest = bestEverE1rm(workouts, entry.exId)
+  const last = lastTimeLine(workouts, entry.exId, r => effortLabel(r, scale))
   const firstWork = entry.sets.find(s => !s.warmup)
+  const policy = entry.cfg.goal ? 'goal' : policyOf(entry.cfg, ex)
 
   const patchSet = (i, patch) => onChange({ ...entry, sets: entry.sets.map((s, j) => (j === i ? { ...s, ...patch, auto: false } : s)) })
-
   const toggleDone = i => {
     primeAudio()
     const s = entry.sets[i]
     const nowDone = !s.done
-    let sets = entry.sets.map((x, j) => (j === i ? { ...x, done: nowDone, rir: x.rir ?? (x.warmup ? null : entry.cfg.rir) } : x))
+    let sets = entry.sets.map((x, j) => (j === i ? { ...x, done: nowDone, rir: x.rir ?? (x.warmup || !showEffort ? null : entry.cfg.rir) } : x))
     let advice = entry.advice
-    if (nowDone && !s.warmup) {
-      const done = sets[i]
-      const a = nextSetAdvice(done, entry.cfg, step)
-      const nextIdx = sets.findIndex((x, j) => j > i && !x.warmup && !x.done)
-      if (a && nextIdx >= 0) {
-        // Every remaining set you haven't touched by hand follows the new weight.
-        const follows = (x, j) => j > i && !x.warmup && !x.done && x.auto
-        const n = sets.filter(follows).length
+    if (nowDone && !s.warmup && !timed && !entry.cfg.pyramid) {
+      const a = nextSetAdvice(sets[i], entry.cfg, step)
+      const follows = (x, j) => j > i && !x.warmup && !x.done && x.auto
+      const n = sets.filter(follows).length
+      if (a && n) {
         sets = sets.map((x, j) => (follows(x, j) ? { ...x, w: a.w, r: a.r } : x))
-        advice = a.change !== 0 && n ? a.why + (n > 1 ? ` Remaining ${n} sets updated.` : ' Next set updated.') : a.why
-      } else if (a) advice = 'Last set done. ' + (a.change > 0 ? 'Next session will go up.' : a.change < 0 ? 'Next session will adjust down.' : 'Nailed it.')
+        advice = a.change !== 0 ? a.why + (n > 1 ? ` Remaining ${n} sets updated.` : ' Next set updated.') : a.why
+      } else if (a) advice = 'Last set done. ' + (a.change > 0 ? 'Next session will go up.' : a.change < 0 ? 'Next session will adjust.' : 'Nailed it.')
     }
     onChange({ ...entry, sets, advice })
     if (nowDone) onSetDone(entry, sets[i])
   }
-
+  const removeSet = i => {
+    const removed = entry.sets[i]
+    const before = entry
+    onChange({ ...entry, sets: entry.sets.filter((_, j) => j !== i) })
+    app.toast({ text: (removed.warmup ? 'Warm-up' : 'Set') + ' deleted', action: { label: 'Undo', run: () => onChange(before) } })
+  }
+  const copySet = i => {
+    const s = entry.sets[i]
+    onChange({ ...entry, sets: [...entry.sets.slice(0, i + 1), { ...s, done: false, auto: false }, ...entry.sets.slice(i + 1)] })
+  }
   const addSet = () => {
-    const last = [...entry.sets].reverse().find(s => !s.warmup) || { w: entry.target.w, r: entry.cfg.repsMin }
-    onChange({ ...entry, sets: [...entry.sets, { w: last.w, r: last.r, rir: null, done: false, auto: true }] })
+    const lastW = [...entry.sets].reverse().find(s => !s.warmup) || { w: entry.target.w, r: entry.cfg.repsMin, sec: entry.target.sec }
+    onChange({ ...entry, sets: [...entry.sets, { w: lastW.w, r: lastW.r, sec: lastW.sec, rest: lastW.rest, rir: null, done: false, auto: true }] })
   }
   const addWarmups = () => {
-    const bar = ex.eq === 'barbell' ? settings.bar || 20 : 0
     const w = warmupSets(firstWork?.w || entry.target.w, bar, step).map(s => ({ ...s, rir: null, done: false }))
     onChange({ ...entry, sets: [...w, ...entry.sets.filter(s => !s.warmup)] })
   }
-  const removeSet = i => onChange({ ...entry, sets: entry.sets.filter((_, j) => j !== i) })
+  const setCfg = patch => onChange({ ...entry, cfg: { ...entry.cfg, ...patch } })
 
+  const perSideW = firstWork?.w > bar && bar ? fmt((firstWork.w - bar) / 2) : null
+  // One plates link, on the next set to do, keeps the table quiet.
+  const platesIdx = bar > 0 ? entry.sets.findIndex(x => !x.done && x.w > 0) : -1
   let workNo = 0
-  return html`<article class=${'ex-card' + (entry.group ? ' in-superset' : '')} id=${'ex-' + entry.key}>
+  const s = setMenuIdx != null ? entry.sets[setMenuIdx] : null
+  return html`<article class=${'ex-card view-' + view + (entry.group ? ' in-superset' : '')} id=${'ex-' + entry.key}>
+    ${view === 'focus' && html`<p class="ex-count">Exercise ${index + 1} / ${count}${label ? ` · superset ${label}` : ''}</p>
+      <${ExerciseDemo} ex=${ex} sex=${settings.sex} minimized=${demoMin} onToggle=${onToggleDemo} />`}
     <header class="ex-head">
-      ${label && html`<span class="ss-tag" title="Superset">${label}</span>`}
-      <div class="ex-title">
-        <h3>${ex.name}</h3>
-        <p class="ex-target">${entry.cfg.sets} × ${entry.cfg.repsMin}${entry.cfg.repsMax !== entry.cfg.repsMin ? '–' + entry.cfg.repsMax : ''} @ RIR ${entry.cfg.rir}${entry.target.w ? html` · <b>${fmt(entry.target.w)} kg</b>` : ''}</p>
-      </div>
-      <div class="ex-tools">
-        <button class="icon-btn" aria-label="Move up" onClick=${() => onMove(-1)}>↑</button>
-        <button class="icon-btn" aria-label="Move down" onClick=${() => onMove(1)}>↓</button>
-        <button class="icon-btn" aria-label="Remove exercise" onClick=${onRemove}>✕</button>
-      </div>
+      ${label && html`<span class="ss-tag">${label}</span>`}
+      <h3 class="ex-name" onClick=${() => setInfo(true)}>${ex.name}</h3>
+      <button class="circle-btn" aria-label=${'Options for ' + ex.name} onClick=${() => setMenu(true)}><${Icon} name="more" /></button>
     </header>
-    <p class="why">${entry.target.why}</p>
+    <div class="tag-row">
+      ${(ex.p || []).slice(0, 2).map(m => html`<span class="tag">${MUSCLE_NAME[m] || m}</span>`)}
+      <span class="tag">${EQUIPMENT_NAMES[ex.eq] || ex.eq}</span>
+      ${prevBest > 0 && html`<span class="tag">Best: ${fmt(prevBest)} kg 1RM</span>`}
+      ${ex.uni && html`<span class="tag">Per side</span>`}
+    </div>
+    ${last && html`<p class="last-time">Last time (${fmtDate(last.date)}): ${last.text}</p>`}
+    ${bar > 0 && firstWork?.w > 0 && html`<p class="bar-line"><${Icon} name="dumbbell" size=${15} /> ${BAR_TYPES[ex.eq]} ${bar} kg${perSideW ? ` · ${perSideW} kg per side` : ''}</p>`}
+    <p class=${'prog-line k-' + entry.target.kind}><${Icon} name=${entry.target.kind === 'deload' || entry.target.kind === 'down' ? 'down' : entry.target.kind === 'hold' ? 'right' : 'up'} size=${15} />
+      <b>${policy === 'goal' ? 'Goal journey' : POLICIES[policy]?.name}</b> · ${entry.target.why}</p>
 
-    <div class="sets">
-      <div class="set-row set-head" aria-hidden="true"><span>Set</span><span>kg</span><span>Reps</span><span>RIR</span><span></span></div>
-      ${entry.sets.map((s, i) => {
-        const tag = s.warmup ? 'W' : String(++workNo)
-        const est = !s.warmup && s.r > 0 ? e1rm(s.w, s.r, s.rir ?? entry.cfg.rir) : null
-        const isPr = s.done && est && prevBest > 0 && est > prevBest
-        return html`<div class=${'set-row' + (s.done ? ' done' : '') + (s.warmup ? ' warm' : '')}>
-          <button class="set-tag" aria-label=${(s.warmup ? 'Warm-up set' : 'Set ' + tag) + '. Tap to remove.'} title="Remove set" onClick=${() => removeSet(i)}>${tag}</button>
-          <${Stepper} id=${`w-${entry.key}-${i}`} label="Weight" value=${s.w} step=${step} onChange=${v => patchSet(i, { w: v })} />
-          <${Stepper} id=${`r-${entry.key}-${i}`} label="Reps" value=${s.r} step=${1} onChange=${v => patchSet(i, { r: v })} />
-          ${s.warmup ? html`<span class="rir-none">warm-up</span>` : html`<select class="rir-select" aria-label="Reps in reserve" value=${s.rir ?? ''} onChange=${e => patchSet(i, { rir: e.target.value === '' ? null : +e.target.value })}>
-            <option value="">${entry.cfg.rir}?</option>
-            ${RIR_OPTS.map(o => html`<option value=${o}>${o === 4 ? '4+' : o}</option>`)}
-          </select>`}
-          <button class=${'check' + (s.done ? ' on' : '')} aria-pressed=${s.done} aria-label=${s.done ? 'Mark not done' : 'Mark done'} onClick=${() => toggleDone(i)}>✓</button>
-          <div class="set-meta">
-            ${est && html`<span class="e1rm">≈ ${fmt(est)} kg 1RM</span>`}
-            ${isPr && html`<span class="pr">PR</span>`}
-            ${ex.eq === 'barbell' && s.w > 0 && html`<button class="link" onClick=${() => setPlateFor(plateFor === i ? null : i)}>${plateFor === i ? 'hide plates' : 'plates'}</button>`}
-          </div>
-          ${plateFor === i && html`<div class="set-plates"><${PlateBar} weight=${s.w} bar=${settings.bar || 20} plates=${settings.plates} /></div>`}
-        </div>`
+    <div class="sets-box">
+      <div class=${'set-row set-head' + (showEffort ? '' : ' no-effort')} aria-hidden="true"><span></span><span>${bw ? '+KG' : 'WEIGHT (KG)'}</span><span>${timed ? 'SECONDS' : ex.uni ? 'REPS/SIDE' : 'REPS'}</span>${showEffort && html`<span>${scale.toUpperCase()}</span>`}<span></span></div>
+      ${entry.sets.map((st, i) => {
+        const tag = st.warmup ? 'W' : String(++workNo)
+        const est = !st.warmup && !timed && st.r > 0 && st.w > 0 ? e1rm(st.w, st.r, st.rir ?? entry.cfg.rir) : null
+        return html`<${SetRow} key=${i + '-' + entry.sets.length} set=${st} tag=${tag} ex=${ex} step=${step} scale=${scale} showEffort=${showEffort} timed=${timed} bodyweight=${bw} perSide=${ex.uni}
+          est=${st.done ? est : null} isPr=${st.done && est && prevBest > 0 && est > prevBest} plates=${i === platesIdx || plateIdx === i} platesOpen=${plateIdx === i} onPlates=${() => setPlateIdx(plateIdx === i ? null : i)}
+          onPatch=${p => patchSet(i, p)} onToggle=${() => toggleDone(i)} onDelete=${() => removeSet(i)} onCopy=${() => copySet(i)} onMenu=${() => setSetMenuIdx(i)} onEffort=${() => setEffortIdx(i)} />
+          ${plateIdx === i && html`<${PlateBar} weight=${st.w} bar=${bar} plates=${settings.plates} label=${BAR_TYPES[ex.eq]} />`}`
       })}
+      <div class="sets-actions">
+        <button class="text-btn" onClick=${addSet}><${Icon} name="plus" size=${16} /> Add set</button>
+        ${bar > 0 && !entry.sets.some(x => x.warmup) && html`<button class="text-btn" onClick=${addWarmups}><${Icon} name="flame" size=${16} /> Warm-ups</button>`}
+        <button class="text-btn" onClick=${() => setRestFor('exercise')}><${Icon} name="timer" size=${16} /> ${fmtClock(entry.cfg.rest || settings.rest || 150)}</button>
+      </div>
     </div>
     ${entry.advice && html`<p class="advice" role="status">${entry.advice}</p>`}
-    <div class="ex-actions">
-      <button class="btn small" onClick=${addSet}>+ Set</button>
-      ${ex.eq === 'barbell' && !entry.sets.some(s => s.warmup) && html`<button class="btn small" onClick=${addWarmups}>+ Warm-ups</button>`}
-      <button class=${'btn small' + (isLinked ? ' on' : '')} onClick=${onToggleSuperset}>${isLinked ? 'Unlink superset' : 'Superset with next'}</button>
-      <label class="rest-pick"><span class="sr">Rest between sets</span>⏱
-        <select id=${'rest-' + entry.key} aria-label="Rest between sets" value=${entry.cfg.rest || settings.rest || 150} onChange=${e => onChange({ ...entry, cfg: { ...entry.cfg, rest: +e.target.value } })}>
-          ${[...new Set([...REST_PRESETS, entry.cfg.rest || settings.rest || 150])].sort((a, b) => a - b).map(s => html`<option value=${s}>${fmtClock(s)}</option>`)}
-        </select></label>
-      ${ex.cues?.length > 0 && html`<button class="btn small ghost" aria-expanded=${showCues} onClick=${() => setShowCues(!showCues)}>Form cues</button>`}
-    </div>
-    ${showCues && html`<ol class="cues">${ex.cues.map(c => html`<li>${c}</li>`)}</ol>`}
+
+    <${ActionSheet} open=${menu} title=${ex.name} onClose=${() => setMenu(false)} actions=${[
+      { label: 'How to & muscles', icon: 'info', onClick: () => setInfo(true) },
+      { label: 'Swap exercise', icon: 'swap', onClick: onSwap },
+      { label: isLinked ? 'Unlink superset' : 'Superset with next', icon: 'link', onClick: onToggleSuperset },
+      { label: 'Progression rule', icon: 'up', hint: policy === 'goal' ? 'Set by your goal' : POLICIES[policy]?.name, onClick: () => setProgSheet(true) },
+      { label: entry.cfg.pyramid ? 'Turn off pyramid sets' : 'Pyramid sets', icon: 'stats', hint: 'Own weight, reps and rest per set', onClick: () => setCfg({ pyramid: !entry.cfg.pyramid }) },
+      { label: 'Rest time', icon: 'timer', hint: fmtClock(entry.cfg.rest || settings.rest || 150), onClick: () => setRestFor('exercise') },
+      index > 0 && { label: 'Move up', icon: 'up', onClick: () => onMove(-1) },
+      index < count - 1 && { label: 'Move down', icon: 'down', onClick: () => onMove(1) },
+      { label: 'Remove exercise', icon: 'trash', danger: true, onClick: onRemove },
+    ]} />
+    <${ActionSheet} open=${s != null} title=${s?.warmup ? 'Warm-up set' : 'Set ' + (setMenuIdx != null ? entry.sets.slice(0, setMenuIdx + 1).filter(x => !x.warmup).length : '')} onClose=${() => setSetMenuIdx(null)} actions=${s ? [
+      { label: s.warmup ? 'Make it a working set' : 'Make it a warm-up', icon: 'flame', onClick: () => patchSet(setMenuIdx, { warmup: !s.warmup }) },
+      !s.warmup && { label: s.failure ? 'Not to failure' : 'Taken to failure', icon: 'bolt', onClick: () => patchSet(setMenuIdx, { failure: !s.failure, rir: s.failure ? s.rir : 0 }) },
+      { label: 'Rest after this set', icon: 'timer', hint: s.rest ? fmtClock(s.rest) : 'Uses the exercise rest', onClick: () => setRestFor(setMenuIdx) },
+      { label: 'Copy set', icon: 'copy', hint: 'or swipe right', onClick: () => copySet(setMenuIdx) },
+      { label: 'Delete set', icon: 'trash', hint: 'or swipe left', danger: true, onClick: () => removeSet(setMenuIdx) },
+    ] : []} />
+    <${EffortSheet} open=${effortIdx != null} scale=${scale} value=${effortIdx != null ? entry.sets[effortIdx]?.rir : null} onClose=${() => setEffortIdx(null)} onPick=${v => patchSet(effortIdx, { rir: v })} />
+    <${Sheet} open=${restFor != null} title=${restFor === 'exercise' ? 'Rest between sets' : 'Rest after this set'} onClose=${() => setRestFor(null)}>
+      <${WheelPicker} value=${restFor === 'exercise' ? entry.cfg.rest || settings.rest || 150 : entry.sets[restFor]?.rest || entry.cfg.rest || settings.rest || 150}
+        onChange=${v => (restFor === 'exercise' ? setCfg({ rest: v }) : patchSet(restFor, { rest: v }))} />
+      ${restFor !== 'exercise' && html`<button class="btn ghost" onClick=${() => { patchSet(restFor, { rest: undefined }); setRestFor(null) }}>Use the exercise rest</button>`}
+      <button class="btn primary" onClick=${() => setRestFor(null)}>Done</button>
+    </${Sheet}>
+    <${Sheet} open=${progSheet} title="Progression rule" onClose=${() => setProgSheet(false)}>
+      ${policy === 'goal' ? html`<p class="muted">This lift follows your goal journey, which sets each week's sets, reps and weight.</p>` : html`
+      <div class="group">${Object.entries(POLICIES).filter(([k]) => (timed ? ['time', 'off'] : ['double', 'linear', 'greyskull', 'triple', 'off']).includes(k)).map(([k, p]) => html`
+        <button class=${'row-btn' + (policy === k ? ' on' : '')} onClick=${() => { setCfg({ prog: k, pyramid: false }); setProgSheet(false) }}><span class="row-main"><span>${p.name}</span><small>${p.desc}</small></span>${policy === k && html`<${Icon} name="check" />`}</button>`)}</div>
+      <p class="muted small">Takes effect from the next session. Save the workout as a routine to keep it.</p>`}
+    </${Sheet}>
+    <${InfoSheet} ex=${ex} open=${info} onClose=${() => setInfo(false)} sex=${settings.sex} />
   </article>`
 }

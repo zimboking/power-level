@@ -2,6 +2,8 @@
 // before logging anything. Eight weeks of push / pull / legs with steady progress.
 import { FOODS, macrosFor } from './nutrition.js'
 import { e1rm } from './strength.js'
+import { STARTER_PLANS } from './exercises.js'
+import { emptyPlan } from './schedule.js'
 
 const iso = d => d.toISOString().slice(0, 10)
 const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d) }
@@ -15,7 +17,7 @@ export function makeExampleData(profile) {
     const base = 56 - week * 7
     const bench = 72.5 + week * 2.5, squat = 115 + week * 2.5, dead = 140 + week * 5, ohp = 42.5 + week * 1.25
     const push = base, pull = base - 2, legs = base - 4
-    const mk = (ago, name, entries) => workouts.push({ id: 'ex' + ago, date: daysAgo(ago), name, feeling: feelings[ago] || 'great', note: feelings[ago] === 'rough' ? 'Head cold' : '', durationMin: 62, entries })
+    const mk = (ago, name, entries) => workouts.push({ id: 'ex' + ago, date: daysAgo(ago), name, routineId: 'r-' + name.toLowerCase(), feeling: feelings[ago] || 'great', note: feelings[ago] === 'rough' ? 'Head cold' : '', durationMin: 62, entries })
     const f = ago => (feelings[ago] === 'rough' ? 0.9 : feelings[ago] === 'flat' ? 0.95 : 1)
     const r25 = v => Math.round(v / 2.5) * 2.5
     mk(push, 'Push', [
@@ -46,6 +48,8 @@ export function makeExampleData(profile) {
       ...profile, example: true, weighins,
       goals: [{ id: 'g-ex', exId: 'bench', target: 140, start: e1rm(72.5, 8, 2), startDate: daysAgo(42), level: null }],
       settings: { ...profile.settings, goalWeight: 82 },
+      templates: STARTER_PLANS[0].routines.map(r => ({ ...r, items: r.items.map(i => ({ ...i })) })),
+      plan: { ...emptyPlan(), mode: 'weekly', days: { 1: 'r-push', 3: 'r-pull', 5: 'r-legs' } },
     },
     workouts: workouts.sort((a, b) => a.date.localeCompare(b.date)),
     food,
