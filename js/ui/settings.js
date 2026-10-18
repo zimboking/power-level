@@ -5,6 +5,7 @@ import { BAR_TYPES, DEFAULT_BARS } from '../exercises.js'
 import { emptyPlan } from '../schedule.js'
 import { today, isStandalone, makeBackup, parseBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
+import { capyOn } from '../water.js'
 
 export function SettingsSheet({ open, onClose, app }) {
   const s = app.state.profile.settings
@@ -51,6 +52,10 @@ export function SettingsSheet({ open, onClose, app }) {
       <${Toggle} id="set-beep" checked=${s.restSound !== false} onChange=${v => set({ restSound: v })} label="Beep when rest ends" />
       <div class="toggle-row"><span class="row-main"><span>Week starts on</span></span><${Segmented} small label="Week starts on" value=${plan.weekStart} onChange=${v => app.update(st => ({ ...st, profile: { ...st.profile, plan: { ...plan, weekStart: v } } }), ['profile'])} options=${[{ value: 1, label: 'Monday' }, { value: 0, label: 'Sunday' }]} /></div>
     </div>
+    <p class="section-label">Extras</p>
+    <div class="group">
+      <${Toggle} id="set-capyspa" checked=${capyOn(s)} onChange=${v => set({ capyspa: v })} label="CapySpa water tracker" hint="Capy’s hot spring fills as you drink. Turning it off hides the tab and the Home card; your water log is kept." />
+    </div>
     <p class="section-label">Equipment</p>
     <div class="card-flat stack">
       <div class="row-2">${Object.entries(BAR_TYPES).map(([k, l]) => num(k, l + ' (kg)', null, bars, v => set({ bars: { ...bars, [k]: v || DEFAULT_BARS[k] } })))}</div>
@@ -71,6 +76,7 @@ export function SettingsSheet({ open, onClose, app }) {
     </div>
     <p class="muted small center">Exercise photos: free-exercise-db (public domain). Body diagram: MuscleMap (MIT).</p>
     <p class="muted small center">Food data: Australian Food Composition Database, Release 3, by Food Standards Australia New Zealand (CC BY 4.0); FSANZ does not endorse this app. Packaged products: Open Food Facts contributors (ODbL). Quick picks are rough estimates, not from a cited table.</p>
+    <p class="muted small center">CapySpa: from Water-habit-app-2 by zimboking (Apache 2.0). Drink ratios follow the Beverage Hydration Index (Maughan et al., 2016).</p>
     <${Sheet} open=${restWheel} title="Default rest" onClose=${() => setRestWheel(false)}>
       <${WheelPicker} value=${s.rest || 150} onChange=${v => set({ rest: v })} />
       <button class="btn primary" onClick=${() => setRestWheel(false)}>Done</button>

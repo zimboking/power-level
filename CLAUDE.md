@@ -41,9 +41,11 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/off.js` | Open Food Facts barcode lookup and name search (online only) |
 | `js/exercises.js` | 32 core exercises + catalogue loader + registry of picked exercises |
 | `js/store.js` | Persistence (Claude artifact db or localStorage), backups |
+| `js/water.js` | CapySpa water tracker: drink logs per day, hydration ratios, stages, streak, mood insight |
 | `js/data/catalog.json`, `body.json` | Generated; see `tools/build-data.mjs` and NOTICE.md |
 | `js/data/foods.json` | Generated from FSANZ AFCD Release 3; see `tools/build-foods.mjs` |
 | `js/ui/*.js` | Views: home, plan-tab, workout, exercise-card, set-row, stats-tab, food, library… |
+| `js/ui/capyspa.js`, `capy-stats.js`, `onsen.js` | CapySpa tab (Spa / Log / Stats), its Home card, the onsen SVG |
 | `tools/xlsx.mjs` | Tiny dependency-free .xlsx reader for build scripts |
 | `tools/build-site.mjs` | Builds `docs/` (head, manifest, icons, service worker) |
 | `docs/` | Built site served by GitHub Pages. Never edit by hand |
@@ -52,7 +54,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```
@@ -81,7 +83,13 @@ Data files (only when the sources change):
 - **Exercise ids:** core ids (`bench`, `squat`…) are stable and used by goals and history.
   Catalogue exercises are `fdb:<id>` and are copied into `profile.exercises` when first used.
 - **State is immutable**: `app.update(fn, keys)` with save keys `'profile'`, `'w:<workoutId>'`,
-  `'f:<date>'`.
+  `'f:<date>'`, `'h:<date>'` (CapySpa water day).
+- **CapySpa** (ported from zimboking/Water-habit-app-2, Apache 2.0) is on unless
+  `settings.capyspa === false`. On, the bar is Home · Plan · Start · Food · More (Stats, CapySpa),
+  so the centre button stays centred; off, it's the original five tabs. Its colours are `--cs-*`
+  tokens (the onsen is daytime in light theme, dusk in dark). The original's Squad tab was
+  simulated friends, so it wasn't ported; it needs a backend to be real.
+- **Backups without `water`** (made before CapySpa) leave the water log on the device alone.
 - **Food values in `js/nutrition.js` are approximate.** They were written from general knowledge,
   not a cited table. Don't present them as sourced. Every food carries `src` (`afcd`, `off`,
   `custom`, `est`) and the UI shows it; keep it that way for any new source.

@@ -121,7 +121,7 @@ test('energy units: stored as kcal, shown and entered as kJ', async () => {
 
 test('backups round-trip and reject the wrong file', async () => {
   const { makeBackup, parseBackup } = await import('../js/store.js')
-  const state = { profile: { goals: [] }, workouts: [{ id: 'a', date: '2026-10-01', entries: [] }], food: { '2026-10-01': [] } }
+  const state = { profile: { goals: [] }, workouts: [{ id: 'a', date: '2026-10-01', entries: [] }], food: { '2026-10-01': [] }, water: {} }
   const back = parseBackup(makeBackup(state))
   assert.deepEqual(back, state)
   assert.throws(() => parseBackup('{"hello":1}'))

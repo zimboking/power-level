@@ -70,3 +70,11 @@ table. The app labels them as estimates.
 
 Feature ideas (deriving targets from the log, progression policies, the RIR %1RM table) come
 from openGym (AGPL-3.0). No openGym source code is included here.
+
+## CapySpa
+
+`js/water.js`, `js/ui/capyspa.js`, `js/ui/capy-stats.js` and `js/ui/onsen.js` are ported from
+[Water-habit-app-2](https://github.com/zimboking/Water-habit-app-2) (CapySpa) by zimboking,
+released under the **Apache License 2.0**. Changes: rewritten from React + Tailwind to Preact + htm,
+stored in Power Level's state and backups, themed for light and dark, mock history and the
+simulated Squad tab removed.

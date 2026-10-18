@@ -2,6 +2,7 @@
 //   data/users/<uid>/profile                  settings, weigh-ins, goals, templates, custom foods
 //   data/users/<uid>/profile/workouts/<id>    one document per finished workout
 //   data/users/<uid>/profile/food/<date>      one document per day of food
+//   data/users/<uid>/profile/water/<date>     one document per day of CapySpa drinks and mood
 // When the database isn't available (preview, signed out) it falls back to this browser only.
 
 const LOCAL_KEY = 'powerlevel.v1'
@@ -41,25 +42,27 @@ const retryOnce = async fn => {
   }
 }
 
-/** Load everything. Returns { mode: 'cloud'|'local', profile, workouts, food } */
+/** Load everything. Returns { mode: 'cloud'|'local', profile, workouts, food, water } */
 export async function loadAll() {
   let conn = null
   try { conn = await connect() } catch { conn = null }
   if (!conn) {
     const local = readLocal() || {}
     const lp = local.profile || {}
-    return { mode: 'local', conn: null, profile: { ...emptyProfile(), ...lp, settings: { ...emptyProfile().settings, ...(lp.settings || {}) } }, workouts: local.workouts || [], food: local.food || {}, active: local.active || null }
+    return { mode: 'local', conn: null, profile: { ...emptyProfile(), ...lp, settings: { ...emptyProfile().settings, ...(lp.settings || {}) } }, workouts: local.workouts || [], food: local.food || {}, water: local.water || {}, active: local.active || null }
   }
-  const [p, ws, fs] = await Promise.all([
+  const [p, ws, fs, hs] = await Promise.all([
     retryOnce(() => conn.root.get()),
     retryOnce(() => conn.root.collection('workouts').limit(1000).get()),
     retryOnce(() => conn.root.collection('food').limit(1000).get()),
+    retryOnce(() => conn.root.collection('water').limit(1000).get()),
   ])
   const pdata = p.exists ? p.data() : {}
   const profile = { ...emptyProfile(), ...pdata, settings: { ...emptyProfile().settings, ...(pdata.settings || {}) } }
   const workouts = ws.docs.map(d => ({ ...d.data(), id: d.id }))
   const food = Object.fromEntries(fs.docs.map(d => [d.id, d.data().entries || []]))
-  return { mode: 'cloud', conn, profile, workouts, food, active: pdata.active || null }
+  const water = Object.fromEntries(hs.docs.map(d => [d.id, { logs: d.data().logs || [], ...(d.data().mood ? { mood: d.data().mood } : {}) }]))
+  return { mode: 'cloud', conn, profile, workouts, food, water, active: pdata.active || null }
 }
 
 // A store that writes only what changed. In local mode it writes the whole state at once.
@@ -70,7 +73,7 @@ export function createSaver(conn, getState, onError) {
     timer = null
     const s = getState()
     if (!conn) {
-      if (!writeLocal({ profile: s.profile, workouts: s.workouts, food: s.food, active: s.active })) onError?.('This browser blocked saving. Data will be lost when you close the page.')
+      if (!writeLocal({ profile: s.profile, workouts: s.workouts, food: s.food, water: s.water, active: s.active })) onError?.('This browser blocked saving. Data will be lost when you close the page.')
       pending.clear()
       return
     }
@@ -87,6 +90,11 @@ export function createSaver(conn, getState, onError) {
         } else if (job.startsWith('f:')) {
           const date = job.slice(2)
           await retryOnce(() => conn.root.collection('food').doc(date).set({ entries: s.food[date] || [] }))
+        } else if (job.startsWith('h:')) {
+          const date = job.slice(2)
+          const day = s.water[date]
+          const ref = conn.root.collection('water').doc(date)
+          await retryOnce(() => (day ? ref.set({ logs: day.logs || [], mood: day.mood || null }) : ref.delete()))
         }
       } catch (err) {
         onError?.(err?.code === 'quota_exceeded' ? 'Storage is full. Delete some old workouts to keep saving.'
@@ -119,14 +127,18 @@ export async function requestPersistence() {
 
 export const BACKUP_KIND = 'power-level-backup'
 export function makeBackup(state) {
-  return JSON.stringify({ kind: BACKUP_KIND, version: 1, savedAt: new Date().toISOString(), profile: state.profile, workouts: state.workouts, food: state.food })
+  return JSON.stringify({ kind: BACKUP_KIND, version: 1, savedAt: new Date().toISOString(), profile: state.profile, workouts: state.workouts, food: state.food, water: state.water || {} })
 }
 // Validates shape before anything is replaced, so a wrong file can't wipe your data.
 export function parseBackup(text) {
   const d = JSON.parse(text)
   if (!d || typeof d !== 'object' || typeof d.profile !== 'object' || !Array.isArray(d.workouts)) throw new Error('not a backup')
   if (d.workouts.some(w => !w || typeof w.date !== 'string' || !Array.isArray(w.entries))) throw new Error('bad workouts')
-  return { profile: d.profile, workouts: d.workouts, food: d.food && typeof d.food === 'object' ? d.food : {} }
+  // Backups from before CapySpa have no water; the caller then keeps what's on the device.
+  const water = d.water && typeof d.water === 'object' && !Array.isArray(d.water)
+    ? Object.fromEntries(Object.entries(d.water).filter(([, day]) => day && Array.isArray(day.logs)))
+    : undefined
+  return { profile: d.profile, workouts: d.workouts, food: d.food && typeof d.food === 'object' ? d.food : {}, water }
 }
 
 // Download a file on a normal website. Inside Claude downloads are blocked, so callers check isStandalone().
