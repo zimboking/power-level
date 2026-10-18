@@ -4,6 +4,7 @@ import { html, useState, useEffect, Icon, Sheet, Field, Chips, Toggle, ActionShe
 import { ExerciseCard } from './exercise-card.js'
 import { LibrarySheet } from './library.js'
 import { RoutineEditor } from './plan-tab.js'
+import { groupRoutines, saveRoutine as storeRoutine } from '../routines.js'
 import { buildEntry, bestEverE1rm, DEFAULT_CFG } from '../plan.js'
 import { FEELINGS, workoutVolume, bestE1rm } from '../strength.js'
 import { liftedComparison, formatKg } from '../power.js'
@@ -68,7 +69,7 @@ export function StartSheet({ open, onClose, app, routine, onStart, onCustom }) {
     </div></div>
     <p class="section-label">Routine</p>
     <div class="group">
-      ${routines.map(r => html`<button class=${'row-btn' + (pick === r.id ? ' on' : '')} onClick=${() => setPick(r.id)}><span class="row-main"><span>${r.name}${routine?.id === r.id ? ' · today' : ''}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span>${pick === r.id && html`<${Icon} name="check" />`}</button>`)}
+      ${groupRoutines(app.state.profile).flatMap(g => g.routines).map(r => html`<button class=${'row-btn' + (pick === r.id ? ' on' : '')} onClick=${() => setPick(r.id)}><span class="row-main"><span>${r.name}${routine?.id === r.id ? ' · today' : ''}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span>${pick === r.id && html`<${Icon} name="check" />`}</button>`)}
       <button class=${'row-btn' + (pick === '' ? ' on' : '')} onClick=${() => setPick('')}><span class="row-main"><span>Empty workout</span><small>Add exercises as you go</small></span>${pick === '' && html`<${Icon} name="check" />`}</button>
     </div>
     ${onCustom && html`<div class="group"><button class="row-btn" onClick=${() => onCustom({ feeling, note, warm })}><span class="row-ic"><${Icon} name="edit" size=${20} /></span>
@@ -146,7 +147,7 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
     const items = entries.map(e => ({ exId: e.exId, sets: e.sets.filter(s => !s.warmup).length || e.cfg.sets, repsMin: e.cfg.repsMin, repsMax: e.cfg.repsMax, rir: e.cfg.rir, rest: e.cfg.rest, prog: e.cfg.prog, group: e.group ? e.group.replace(/^g-?/, '') : undefined,
       ...(e.cfg.pyramid ? { pyramid: true, pyramidSets: e.sets.filter(s => !s.warmup).map(s => ({ w: s.w, r: s.r, rest: s.rest })) } : {}) }))
     const existing = profile.templates.find(t => t.id === session.routineId)
-    app.update(s => ({ ...s, profile: { ...s.profile, templates: existing ? s.profile.templates.map(t => (t.id === existing.id ? { ...t, items } : t)) : [{ id: 'r' + uid(), name: session.name, items }, ...s.profile.templates] } }), ['profile'])
+    app.update(s => ({ ...s, profile: storeRoutine(s.profile, existing ? { ...existing, items } : { id: 'r' + uid(), name: session.name, items }) }), ['profile'])
     app.toast(existing ? `Updated routine “${existing.name}”` : 'Saved as a routine')
   }
   const total = entries.reduce((n, e) => n + e.sets.filter(s => !s.warmup).length, 0)
@@ -209,6 +210,7 @@ export function WorkoutTab({ app }) {
   const [custom, setCustom] = useState(null) // start options while the builder is open
   const [draft, setDraft] = useState(null)
   const [chosen, setChosen] = useState(null)
+  const [editing, setEditing] = useState(null)
   const openCustom = (opts = { feeling: 'great', note: '', warm: true }) => { setStarting(false); setDraft({ id: 'r' + uid(), name: '', items: [] }); setCustom(opts) }
   if (result) return html`<${Summary} result=${result} onDone=${() => { setResult(null); app.go('home') }} />`
   if (active) {
@@ -240,10 +242,13 @@ export function WorkoutTab({ app }) {
       <span class="row-main"><span class="title-3">Custom workout</span><small>Build today's session your way: exercises, sets, reps and rest. Save it as a routine if you like it.</small></span>
       <${Icon} name="right" size=${18} />
     </button>
-    ${profile.templates.length > 0 && html`<p class="section-label">Your routines</p>
-      <div class="group">${profile.templates.map(r => html`<button class="row-btn" onClick=${() => { setChosen(r); setStarting(true) }}><span class="row-main"><span>${r.name}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span><${Icon} name="right" size=${16} /></button>`)}</div>`}
+    ${profile.templates.length > 0 && html`<div class="card-head"><p class="section-label">Your routines</p><button class="text-btn" onClick=${() => app.go('plan', 'routines')}>Organise</button></div>
+      ${groupRoutines(profile).filter(g => g.routines.length).map(g => html`${g.folder && html`<p class="folder-label">${g.folder.name}</p>`}
+      <div class="group">${g.routines.map(r => html`<div class="row-split"><button class="row-btn" onClick=${() => { setChosen(r); setStarting(true) }}><span class="row-main"><span>${r.name}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span></button>
+        <button class="circle-btn plain" aria-label=${'Edit ' + r.name} onClick=${() => setEditing(r)}><${Icon} name="edit" size=${18} /></button></div>`)}</div>`)}`}
     <${StartSheet} open=${starting} onClose=${() => setStarting(false)} app=${app} routine=${chosen || planned} onCustom=${openCustom}
       onStart=${(r, opts) => { setStarting(false); app.update(s => ({ ...s, active: newSession(app, r, opts) }), ['profile']) }} />
+    <${RoutineEditor} app=${app} routine=${editing} open=${!!editing} onClose=${() => setEditing(null)} />
     <${RoutineEditor} app=${app} routine=${draft} open=${!!custom} mode="custom" onClose=${() => setCustom(null)}
       onStart=${r => { const opts = custom; setCustom(null); app.update(s => ({ ...s, active: newSession({ state: s }, r, opts) }), ['profile']) }} />
   </div>`

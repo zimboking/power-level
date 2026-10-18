@@ -35,6 +35,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/plan.js` | Today's target per exercise (goal journey → policy → feeling), building entries |
 | `js/journey.js` | Goal journey planner (4-week blocks, deload, test day) |
 | `js/schedule.js` | Weekly / rotation plans, overrides, next session, starter plans |
+| `js/routines.js` | Routine folders (`profile.folders`, `routine.folder`), reordering, saving |
 | `js/muscles.js`, `js/stats.js` | Muscle-map maths, heatmap, streaks, strength balance |
 | `js/nutrition.js` | Quick-pick foods (estimates, `src: 'est'`), Mifflin-St Jeor targets, kcal/kJ |
 | `js/foods.js` | Food sources, AFCD loader, search ranking across saved / AFCD / estimates |
@@ -54,7 +55,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```
