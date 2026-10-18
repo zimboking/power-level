@@ -7,7 +7,10 @@ export const DAY_SHORT = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
 
 export const emptyPlan = () => ({ mode: 'weekly', days: {}, rotation: [], trainDays: [1, 3, 5], weekStart: 1, overrides: {} })
 const dow = iso => new Date(iso + 'T12:00:00').getDay()
-export const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+// Dates are local calendar days as 'YYYY-MM-DD'. Never format them with toISOString: that is UTC,
+// so in Australia or New Zealand it lands on the wrong day.
+export const isoLocal = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+export const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return isoLocal(d) }
 
 export function weekOf(iso, weekStart = 1) {
   const back = (dow(iso) - weekStart + 7) % 7

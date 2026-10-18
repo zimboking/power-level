@@ -3,9 +3,9 @@
 import { FOODS, macrosFor } from './nutrition.js'
 import { e1rm } from './strength.js'
 import { STARTER_PLANS } from './exercises.js'
-import { emptyPlan } from './schedule.js'
+import { emptyPlan, isoLocal } from './schedule.js'
 
-const iso = d => d.toISOString().slice(0, 10)
+const iso = isoLocal
 const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d) }
 const sets = (w, reps, rir = 2, n = 3) => Array.from({ length: n }, (_, i) => ({ w, r: reps[i] ?? reps[reps.length - 1], rir: i === n - 1 ? Math.max(0, rir - 1) : rir, done: true }))
 const warm = w => [{ w: 20, r: 10, warmup: true, done: true }, { w: Math.round(w * 0.5 / 2.5) * 2.5, r: 5, warmup: true, done: true }]

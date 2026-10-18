@@ -7,9 +7,10 @@ import { loadFoods, rankFoods, ESTIMATES, SOURCES, sourceOf } from '../foods.js'
 import { lookupBarcode, searchProducts, cleanBarcode, validBarcode, perServing } from '../off.js'
 import { latestBodyweight } from '../plan.js'
 import { uid, today } from '../store.js'
+import { addDays } from '../schedule.js'
 
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks']
-const shiftDate = (iso, d) => { const t = new Date(iso + 'T00:00:00'); t.setDate(t.getDate() + d); return t.toISOString().slice(0, 10) }
+const shiftDate = addDays
 
 export function dailyTargets(profile) {
   const s = profile.settings

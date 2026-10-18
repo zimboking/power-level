@@ -2,6 +2,7 @@
 // progressive overload (volume → strength → intensity, deload every 4th week), finishing with
 // a test day. Re-planned from your actual numbers every time you open it, so it adapts.
 import { weightFor, round1, DEFAULT_STEP } from './strength.js'
+import { addDays } from './schedule.js'
 
 // Typical weekly e1RM gain for natural lifters on a decent program, as a fraction.
 export const LEVELS = {
@@ -64,11 +65,7 @@ export function planJourney({ start, goal, level = 'intermediate', step = DEFAUL
   return { weeks, reachable, totalWeeks: remaining, etaDate: reachable && startDate ? addWeeks(startDate, remaining) : null }
 }
 
-export function addWeeks(isoDate, n) {
-  const d = new Date(isoDate + 'T00:00:00')
-  d.setDate(d.getDate() + n * 7)
-  return d.toISOString().slice(0, 10)
-}
+export const addWeeks = (isoDate, n) => addDays(isoDate, n * 7)
 
 export function percentThere(start, current, goal) {
   if (!(goal > start)) return current >= goal ? 100 : 0
