@@ -134,3 +134,22 @@ test('moving a session onto a booked day swaps the two; onto a free day leaves a
   const trained = moveSession(profile, [{ date: wed, entries: [] }], mon, wed, mon)
   assert.equal(trained[mon], 'rest')
 })
+
+test('the default progression comes from settings; an exercise rule or a timed exercise wins', async () => {
+  const { policyOf, defaultProgOf } = await import('../js/plan.js')
+  const bench = exInfo('bench'), plank = exInfo('plank')
+  assert.equal(policyOf({}, bench, {}), 'double')
+  assert.equal(policyOf({}, bench, { defaultProg: 'linear' }), 'linear')
+  assert.equal(policyOf({ prog: 'triple' }, bench, { defaultProg: 'linear' }), 'triple')
+  assert.equal(policyOf({}, plank, { defaultProg: 'linear' }), 'time')
+  assert.equal(policyOf({ pyramid: true }, bench, { defaultProg: 'linear' }), 'off')
+  assert.equal(defaultProgOf({ defaultProg: 'time' }), 'double') // not a weight rule
+})
+
+test('with linear as the default, a full session moves the weight up', async () => {
+  const { targetFor } = await import('../js/plan.js')
+  const profile = { settings: { defaultProg: 'linear' }, goals: [], exercises: {} }
+  const done = { date: '2026-10-12', entries: [{ exId: 'bench', target: { w: 100, r: 5 }, sets: [5, 5, 5].map(r => ({ w: 100, r, rir: 1, done: true })) }] }
+  const t = targetFor({ exId: 'bench', cfg: { sets: 3, repsMin: 5, repsMax: 5, rir: 2 }, workouts: [done], profile, feeling: 'great', todayIso: '2026-10-19' })
+  assert.equal(t.target.w, 102.5)
+})

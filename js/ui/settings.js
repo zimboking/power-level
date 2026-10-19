@@ -6,6 +6,8 @@ import { emptyPlan } from '../schedule.js'
 import { today, isStandalone, makeBackup, parseBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 import { capyOn } from '../water.js'
+import { POLICIES } from '../progression.js'
+import { DEFAULT_PROGS, defaultProgOf } from '../plan.js'
 import { listPhotos, putPhotos, makePhotoBackup, parsePhotoBackup, newPhotos } from '../photos.js'
 
 export function SettingsSheet({ open, onClose, app }) {
@@ -72,6 +74,8 @@ export function SettingsSheet({ open, onClose, app }) {
     <p class="section-label">Training</p>
     <div class="group">
       <div class="toggle-row"><span class="row-main"><span>Workout screen</span><small>Guided shows one exercise at a time with its demo.</small></span><${Segmented} small label="Workout screen" value=${s.view === 'list' ? 'list' : 'focus'} onChange=${v => set({ view: v })} options=${[{ value: 'focus', label: 'Guided' }, { value: 'list', label: 'List' }]} /></div>
+      <label class="toggle-row" for="set-prog"><span class="row-main"><span>Default progression</span><small>For exercises without their own rule. ${POLICIES[defaultProgOf(s)].desc}</small></span>
+        <select id="set-prog" class="input select" value=${defaultProgOf(s)} onChange=${e => set({ defaultProg: e.target.value })}>${DEFAULT_PROGS.map(k => html`<option value=${k}>${POLICIES[k].name}</option>`)}</select></label>
       <${Toggle} id="set-effort" checked=${s.showEffort !== false} onChange=${v => set({ showEffort: v })} label="Effort column" hint="Log how hard each set felt. Powers the smart adjustments." />
       ${s.showEffort !== false && html`<div class="toggle-row"><span class="row-main"><span>Effort scale</span><small>RIR = reps left in the tank. RPE = 10 − RIR.</small></span><${Segmented} small label="Effort scale" value=${s.effort === 'rpe' ? 'rpe' : 'rir'} onChange=${v => set({ effort: v })} options=${[{ value: 'rir', label: 'RIR' }, { value: 'rpe', label: 'RPE' }]} /></div>`}
       <button class="toggle-row" onClick=${() => setRestWheel(true)}><span class="row-main"><span>Default rest</span><small>Each exercise and set can have its own.</small></span><b>${fmtClock(s.rest || 150)}</b></button>

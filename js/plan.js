@@ -40,7 +40,11 @@ export function journeyFor(goal, workouts, profile, todayIso) {
   return { current, level, offset, ...planJourney({ start: current, goal: goal.target, level, step: stepFor(ex), startDate: todayIso, weekOffset: offset }) }
 }
 
-export const policyOf = (cfg, ex) => (cfg.pyramid ? 'off' : POLICIES[cfg.prog] ? cfg.prog : isTimed(ex) ? 'time' : 'double')
+// Rules you can make the default for weight × reps exercises (Settings > Training).
+export const DEFAULT_PROGS = ['double', 'linear', 'greyskull', 'triple', 'off']
+export const defaultProgOf = settings => (DEFAULT_PROGS.includes(settings?.defaultProg) ? settings.defaultProg : 'double')
+/** The rule an exercise follows: its own, else time for timed ones, else your default. */
+export const policyOf = (cfg, ex, settings) => (cfg.pyramid ? 'off' : POLICIES[cfg.prog] ? cfg.prog : isTimed(ex) ? 'time' : defaultProgOf(settings))
 
 export function targetFor({ exId, cfg = DEFAULT_CFG, workouts, profile, feeling, todayIso }) {
   const ex = exInfo(exId)
@@ -57,7 +61,7 @@ export function targetFor({ exId, cfg = DEFAULT_CFG, workouts, profile, feeling,
   }
   if (!target) {
     const history = entriesFor(workouts, exId).filter(e => e.sets?.some(s => s.done && !s.warmup))
-    target = nextTarget(history, { ...cfg, policy: policyOf(cfg, ex), mode: ex.mode, sec: cfg.sec || cfg.repsMin, timeGrow: TIME_UNITS[timeUnitOf(ex, profile?.settings)].grow }, step)
+    target = nextTarget(history, { ...cfg, policy: policyOf(cfg, ex, profile?.settings), mode: ex.mode, sec: cfg.sec || cfg.repsMin, timeGrow: TIME_UNITS[timeUnitOf(ex, profile?.settings)].grow }, step)
   }
   // Bodyweight work carries no load: progress reps (or strap on a dip belt).
   if (isBodyweight(ex) && !(target.w > 0) && target.kind === 'up' && !isTimed(ex)) {

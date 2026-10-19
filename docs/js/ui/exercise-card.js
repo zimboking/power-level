@@ -68,7 +68,7 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
   const [noteOpen, setNoteOpen] = useState(false)
   const last = lastTimeLine(workouts, entry.exId, r => effortLabel(r, scale))
   const firstWork = entry.sets.find(s => !s.warmup)
-  const policy = entry.cfg.goal ? 'goal' : policyOf(entry.cfg, ex)
+  const policy = entry.cfg.goal ? 'goal' : policyOf(entry.cfg, ex, settings)
 
   const patchSet = (i, patch) => onChange({ ...entry, sets: entry.sets.map((s, j) => (j === i ? { ...s, ...patch, auto: false } : s)) })
   const toggleDone = i => {

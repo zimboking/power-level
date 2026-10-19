@@ -11,7 +11,7 @@ import { MUSCLE_NAME } from '../muscles.js'
 import { uid, today, isStandalone } from '../store.js'
 import { shareRoutine } from './share-sheet.js'
 import { TIME_UNITS, timeUnitOf, toUnit, fromUnit, fmtDuration } from '../duration.js'
-import { startCfg } from '../plan.js'
+import { startCfg, defaultProgOf } from '../plan.js'
 import { groupRoutines, addFolder, renameFolder, deleteFolder, moveFolder, moveRoutine, setRoutineFolder, saveRoutine, deleteRoutine } from '../routines.js'
 
 const REST_OPTS = [30, 45, 60, 75, 90, 120, 150, 180, 210, 240, 300, 360, 480, 600, 900]
@@ -31,10 +31,11 @@ function ItemRow({ it, i, n, onChange, onMove, onRemove, linked, onLink, setting
   const ex = exInfo(it.exId)
   const timed = ex.mode === 'time'
   const unit = timeUnitOf(ex, settings)
+  const fallback = timed ? 'time' : defaultProgOf(settings)
   const [open, setOpen] = useState(false)
   return html`<div class=${'item-row' + (it.group ? ' in-superset' : '')}>
     <button class="item-head" onClick=${() => setOpen(!open)} aria-expanded=${open}>
-      <${Thumb} ex=${ex} /><span class="row-main"><span>${ex.name}</span><small>${it.sets} × ${timed ? fmtDuration(it.repsMin) : `${it.repsMin}${it.repsMax !== it.repsMin ? '–' + it.repsMax : ''}`} · ${it.pyramid ? 'pyramid' : POLICIES[it.prog]?.name || (timed ? 'Add time' : 'Double progression')}${it.rest ? ' · rest ' + fmtClock(it.rest) : ''}</small></span>
+      <${Thumb} ex=${ex} /><span class="row-main"><span>${ex.name}</span><small>${it.sets} × ${timed ? fmtDuration(it.repsMin) : `${it.repsMin}${it.repsMax !== it.repsMin ? '–' + it.repsMax : ''}`} · ${it.pyramid ? 'pyramid' : POLICIES[it.prog || fallback]?.name}${it.rest ? ' · rest ' + fmtClock(it.rest) : ''}</small></span>
       <${Icon} name=${open ? 'up' : 'down'} size=${18} />
     </button>
     ${open && html`<div class="item-edit">
@@ -48,11 +49,11 @@ function ItemRow({ it, i, n, onChange, onMove, onRemove, linked, onLink, setting
         <${Field} label="Effort target (RIR)"><select class="input" value=${it.rir ?? 2} onChange=${e => onChange({ ...it, rir: +e.target.value })}>${[0, 1, 2, 3, 4].map(v => html`<option value=${v}>${v}</option>`)}</select></${Field}>
         <${Field} label="Rest"><select class="input" value=${it.rest || ''} onChange=${e => onChange({ ...it, rest: e.target.value ? +e.target.value : undefined })}><option value="">Default</option>${REST_OPTS.map(v => html`<option value=${v}>${fmtClock(v)}</option>`)}</select></${Field}>
       </div>
-      <${Field} label="Progression"><select class="input" value=${it.pyramid ? 'pyramid' : it.prog || (timed ? 'time' : 'double')} onChange=${e => onChange(e.target.value === 'pyramid' ? { ...it, pyramid: true } : { ...it, pyramid: false, prog: e.target.value })}>
+      <${Field} label="Progression"><select class="input" value=${it.pyramid ? 'pyramid' : it.prog || fallback} onChange=${e => onChange(e.target.value === 'pyramid' ? { ...it, pyramid: true } : { ...it, pyramid: false, prog: e.target.value })}>
         ${Object.entries(POLICIES).filter(([k]) => (timed ? ['time', 'off'].includes(k) : k !== 'time')).map(([k, p]) => html`<option value=${k}>${p.name}</option>`)}
         ${!timed && html`<option value="pyramid">Pyramid (own weight, reps, rest per set)</option>`}
       </select></${Field}>
-      <p class="muted small">${it.pyramid ? 'Each set keeps its own weight, reps and rest, read from last time.' : POLICIES[it.prog || (timed ? 'time' : 'double')]?.desc}</p>
+      <p class="muted small">${it.pyramid ? 'Each set keeps its own weight, reps and rest, read from last time.' : POLICIES[it.prog || fallback]?.desc}</p>
       <div class="row-btns">
         <button class="btn small" disabled=${i === 0} onClick=${() => onMove(-1)}>Move up</button>
         <button class="btn small" disabled=${i === n - 1} onClick=${() => onMove(1)}>Move down</button>
