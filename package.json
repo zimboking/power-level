@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs",
+    "test": "node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs",
     "build": "node tools/build-site.mjs docs"
   }
 }

@@ -70,3 +70,28 @@ test('deleting a routine takes it out of the weekly plan, rotation and moved ses
   assert.equal(next.templates.some(r => r.id === 'a'), false)
   assert.deepEqual(deleteRoutine({ templates: [r('x')] }, 'x'), { templates: [] })
 })
+
+test('replacing keeps the slot, sets and superset; a different kind of exercise gets fresh reps or time', async () => {
+  const { replaceItem } = await import('../js/routines.js')
+  const item = { exId: 'bench', sets: 4, repsMin: 5, repsMax: 8, rir: 1, rest: 180, group: 'a', prog: 'linear' }
+  assert.deepEqual(replaceItem(item, 'incline', { id: 'incline', mode: 'reps' }, {}), { ...item, exId: 'incline' })
+  const timed = replaceItem(item, 'plank', { id: 'plank', mode: 'time' }, {})
+  assert.deepEqual([timed.exId, timed.sets, timed.repsMin, timed.group, timed.rest, timed.prog], ['plank', 4, 30, 'a', 180, undefined])
+  const list = [{ exId: 'squat' }, item, { exId: 'row' }]
+  const next = list.map((x, i) => (i === 1 ? replaceItem(x, 'ohp', { id: 'ohp', mode: 'reps' }, {}) : x))
+  assert.deepEqual(next.map(x => x.exId), ['squat', 'ohp', 'row'])
+})
+
+test('deleting your own exercise hides it and takes it out of routines; built-in ones are left alone', async () => {
+  const { deleteCustomExercise, routinesUsing } = await import('../js/routines.js')
+  const p = { exercises: { 'c:run': { id: 'c:run', name: 'Run', custom: true }, 'fdb:X': { id: 'fdb:X', name: 'X' } },
+    templates: [{ id: 'a', items: [{ exId: 'c:run' }, { exId: 'bench' }] }, { id: 'b', items: [{ exId: 'squat' }] }] }
+  assert.equal(routinesUsing(p, 'c:run'), 1)
+  const next = deleteCustomExercise(p, 'c:run')
+  assert.equal(next.exercises['c:run'].hidden, true)
+  assert.equal(next.exercises['c:run'].name, 'Run') // past workouts still show it
+  assert.deepEqual(next.templates[0].items, [{ exId: 'bench' }])
+  assert.equal(next.templates[1], p.templates[1])
+  assert.equal(deleteCustomExercise(p, 'fdb:X'), p)
+  assert.equal(deleteCustomExercise(p, 'bench'), p)
+})

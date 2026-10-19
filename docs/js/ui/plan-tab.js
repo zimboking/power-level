@@ -12,7 +12,9 @@ import { uid, today, isStandalone } from '../store.js'
 import { shareRoutine } from './share-sheet.js'
 import { TIME_UNITS, timeUnitOf, toUnit, fromUnit, fmtDuration } from '../duration.js'
 import { startCfg, defaultProgOf } from '../plan.js'
-import { groupRoutines, addFolder, renameFolder, deleteFolder, moveFolder, moveRoutine, setRoutineFolder, saveRoutine, deleteRoutine } from '../routines.js'
+import { groupRoutines, addFolder, renameFolder, deleteFolder, moveFolder, moveRoutine, setRoutineFolder, saveRoutine, deleteRoutine, replaceItem } from '../routines.js'
+import { moveItem } from '../reorder.js'
+import { useDragSort, Grip } from './drag.js'
 
 const REST_OPTS = [30, 45, 60, 75, 90, 120, 150, 180, 210, 240, 300, 360, 480, 600, 900]
 
@@ -27,17 +29,18 @@ export function routineMuscles(routine) {
 }
 const levelsOf = counts => { const max = Math.max(1, ...Object.values(counts)); return Object.fromEntries(Object.entries(counts).map(([m, v]) => [m, Math.max(1, Math.ceil((v / max) * 4))])) }
 
-function ItemRow({ it, i, n, onChange, onMove, onRemove, linked, onLink, settings }) {
+function ItemRow({ it, i, n, onChange, onMove, onRemove, onReplace, linked, onLink, settings, drag }) {
   const ex = exInfo(it.exId)
   const timed = ex.mode === 'time'
   const unit = timeUnitOf(ex, settings)
   const fallback = timed ? 'time' : defaultProgOf(settings)
   const [open, setOpen] = useState(false)
-  return html`<div class=${'item-row' + (it.group ? ' in-superset' : '')}>
-    <button class="item-head" onClick=${() => setOpen(!open)} aria-expanded=${open}>
+  const ip = drag.itemProps(i)
+  return html`<div class=${'item-row' + (it.group ? ' in-superset' : '') + ip.class} ref=${ip.ref} style=${ip.style}>
+    <div class="item-top">${n > 1 && html`<${Grip} props=${drag.gripProps(i, 'Drag to move ' + ex.name)} />`}<button class="item-head" onClick=${() => setOpen(!open)} aria-expanded=${open}>
       <${Thumb} ex=${ex} /><span class="row-main"><span>${ex.name}</span><small>${it.sets} × ${timed ? fmtDuration(it.repsMin) : `${it.repsMin}${it.repsMax !== it.repsMin ? '–' + it.repsMax : ''}`} · ${it.pyramid ? 'pyramid' : POLICIES[it.prog || fallback]?.name}${it.rest ? ' · rest ' + fmtClock(it.rest) : ''}</small></span>
       <${Icon} name=${open ? 'up' : 'down'} size=${18} />
-    </button>
+    </button></div>
     ${open && html`<div class="item-edit">
       <div class="row-3">
         <${Field} label="Sets"><${Stepper} label="Sets" value=${it.sets} step=${1} min=${1} onChange=${v => onChange({ ...it, sets: Math.max(1, v) })} /></${Field}>
@@ -58,6 +61,7 @@ function ItemRow({ it, i, n, onChange, onMove, onRemove, linked, onLink, setting
         <button class="btn small" disabled=${i === 0} onClick=${() => onMove(-1)}>Move up</button>
         <button class="btn small" disabled=${i === n - 1} onClick=${() => onMove(1)}>Move down</button>
         ${i < n - 1 && html`<button class=${'btn small' + (linked ? ' on' : '')} onClick=${onLink}>${linked ? 'Unlink superset' : 'Superset with next'}</button>`}
+        <button class="btn small" onClick=${onReplace}>Replace</button>
         <button class="btn small danger-text" onClick=${onRemove}>Remove</button>
       </div>
     </div>`}
@@ -115,6 +119,8 @@ export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', o
   const [keep, setKeep] = useState(false)
   const [r, setR] = useState(routine)
   const [pick, setPick] = useState(false)
+  const [replacing, setReplacing] = useState(null) // index of the item being replaced
+  const itemDrag = useDragSort((from, to) => setR(cur => ({ ...cur, items: moveItem(cur.items, from, to) })))
   const [newFolder, setNewFolder] = useState('')
   const [shareText, setShareText] = useState('')
   // Start from the saved routine every time the editor opens, so unsaved changes don't linger.
@@ -157,8 +163,8 @@ export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', o
     ${(!custom || keep) && html`<${FolderField} folders=${folders} value=${r.folder || ''} newName=${newFolder} onChange=${v => setR({ ...r, folder: v })} onNewName=${setNewFolder} />`}
     ${(custom || items.length < 3) && html`<${QuickFill} items=${items} onAdd=${add => setItems([...items, ...add])} />`}
     ${items.length > 0 && html`<div class="card-flat"><p class="section-label">Muscles this works</p><${BodyMap} levels=${levelsOf(routineMuscles(r))} sex=${app.state.profile.settings.sex} size="sm" label=${'Muscles worked by ' + r.name} /></div>`}
-    <div class="group">${items.map((it, i) => html`<${ItemRow} key=${it.exId + i} it=${it} i=${i} n=${items.length} settings=${app.state.profile.settings} linked=${!!it.group && items[i + 1]?.group === it.group}
-      onChange=${v => setItems(items.map((x, j) => (j === i ? v : x)))} onMove=${d => move(i, d)} onRemove=${() => setItems(items.filter((_, j) => j !== i))} onLink=${() => link(i)} />`)}
+    <div class=${'group' + (itemDrag.dragging ? ' drag-on' : '')}>${items.map((it, i) => html`<${ItemRow} key=${it.exId + i} it=${it} i=${i} n=${items.length} settings=${app.state.profile.settings} linked=${!!it.group && items[i + 1]?.group === it.group} drag=${itemDrag}
+      onChange=${v => setItems(items.map((x, j) => (j === i ? v : x)))} onMove=${d => move(i, d)} onRemove=${() => setItems(items.filter((_, j) => j !== i))} onReplace=${() => setReplacing(i)} onLink=${() => link(i)} />`)}
       <button class="row-btn" onClick=${() => setPick(true)}><span class="row-ic"><${Icon} name="plus" size=${20} /></span><span class="row-main"><span>Add exercise</span></span></button>
     </div>
     ${custom ? html`
@@ -170,6 +176,8 @@ export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', o
     ${!isNew && !custom && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to delete" onConfirm=${() => {
       app.update(s => ({ ...s, profile: deleteRoutine(s.profile, r.id) }), ['profile']); onClose()
     }}>Delete routine</${ConfirmButton}>`}
+    <${LibrarySheet} open=${replacing != null} title="Replace exercise" onClose=${() => setReplacing(null)} app=${app}
+      onPick=${(exId, ex) => { const i = replacing; setItems(items.map((x, j) => (j === i ? replaceItem(x, exId, ex || exInfo(exId), app.state.profile.settings) : x))) }} />
     <${LibrarySheet} open=${pick} onClose=${() => setPick(false)} app=${app} onPick=${(exId, ex) => setItems([...items, { exId, ...startCfg(ex || exInfo(exId), app.state.profile.settings) }])} />
   </${Sheet}>`
 }
@@ -182,20 +190,20 @@ export function RoutineOptions({ profile }) {
   return groups.map(g => html`<optgroup label=${g.folder ? g.folder.name : 'No folder'}>${opts(g.routines)}</optgroup>`)
 }
 
-function RoutineCard({ app, r, organise, first, last, onEdit }) {
+function RoutineCard({ app, r, organise, first, last, onEdit, drag, i }) {
   const folders = app.state.profile.folders || []
   const change = fn => app.update(s => ({ ...s, profile: fn(s.profile) }), ['profile'])
   const summary = html`<div class="routine-text"><p class="title-3">${r.name}</p><p class="muted small">${r.items.length} ${r.items.length === 1 ? 'exercise' : 'exercises'} · ${r.items.reduce((n, i) => n + (i.sets || 3), 0)} sets</p>
     <p class="muted small">${[...new Set(r.items.flatMap(i => exInfo(i.exId).p || []))].slice(0, 4).map(m => MUSCLE_NAME[m]).join(' · ')}</p></div>`
-  if (organise) return html`<div class="card routine-card organise">
-    <div class="organise-top">${summary}
+  if (organise) { const ip = drag.itemProps(i); return html`<div class=${'card routine-card organise' + ip.class} ref=${ip.ref} style=${ip.style}>
+    <div class="organise-top"><${Grip} props=${drag.gripProps(i, 'Drag to move ' + r.name)} />${summary}
       <div class="organise-ctrls">
         <button class="circle-btn" aria-label=${'Move ' + r.name + ' up'} disabled=${first} onClick=${() => change(p => moveRoutine(p, r.id, -1))}><${Icon} name="up" size=${18} /></button>
         <button class="circle-btn" aria-label=${'Move ' + r.name + ' down'} disabled=${last} onClick=${() => change(p => moveRoutine(p, r.id, 1))}><${Icon} name="down" size=${18} /></button>
       </div></div>
     ${folders.length > 0 && html`<label class="organise-folder"><span class="muted small">Folder</span><select class="input select" aria-label=${'Folder for ' + r.name} value=${r.folder && folders.some(f => f.id === r.folder) ? r.folder : ''}
       onChange=${e => change(p => setRoutineFolder(p, r.id, e.target.value || null))}><option value="">No folder</option>${folders.map(f => html`<option value=${f.id}>${f.name}</option>`)}</select></label>`}
-  </div>`
+  </div>` }
   return html`<button class="card routine-card" onClick=${onEdit} aria-label=${'Edit ' + r.name}>
     ${summary}
     <div class="routine-map"><${BodyMap} levels=${levelsOf(routineMuscles(r))} sex=${app.state.profile.settings.sex} size="xs" label=${'Muscles worked by ' + r.name} /></div>
@@ -226,6 +234,15 @@ function FolderSheet({ app, folder, onClose }) {
   </${Sheet}>`
 }
 
+// One folder's routines; in Reorder mode they can be dragged within the folder.
+function FolderRoutines({ app, routines, organise, onEdit }) {
+  const drag = useDragSort((from, to) => {
+    const id = routines[from].id, d = to > from ? 1 : -1
+    app.update(s => { let p = s.profile; for (let k = 0; k < Math.abs(to - from); k++) p = moveRoutine(p, id, d); return { ...s, profile: p } }, ['profile'])
+  })
+  return routines.map((r, i) => html`<${RoutineCard} key=${r.id} app=${app} r=${r} i=${i} drag=${drag} organise=${organise} first=${i === 0} last=${i === routines.length - 1} onEdit=${() => onEdit(r)} />`)
+}
+
 function FolderHead({ f, g, gi, count, shut, organise, onToggle, onMove, onEditFolder, onNew }) {
   if (!f) return html`<div class="folder-head"><span class="folder-name plain"><span>No folder</span><small class="muted">${g.routines.length}</small></span></div>`
   return html`<div class="folder-head">
@@ -252,7 +269,7 @@ function RoutinesList({ app, onEdit, onNew }) {
       <button class="text-btn" onClick=${() => setFolderEdit({ name: '' })}><${Icon} name="plus" size=${16} /> New folder</button>
       ${(total > 1 || folders.length > 0) && html`<button class="text-btn" aria-pressed=${organise} onClick=${() => setOrganise(!organise)}>${organise ? 'Done' : 'Reorder'}</button>`}
     </div>
-    ${organise && html`<p class="muted small">Use the arrows to change the order${folders.length ? ', and pick a folder to move a routine there' : ''}. Tap Done when you're finished.</p>`}
+    ${organise && html`<p class="muted small">Drag the grip or use the arrows to change the order${folders.length ? ', and pick a folder to move a routine there' : ''}. Tap Done when you're finished.</p>`}
     ${groups.map((g, gi) => {
       const f = g.folder
       if (!f && !g.routines.length) return null
@@ -260,7 +277,7 @@ function RoutinesList({ app, onEdit, onNew }) {
       return html`<section class="routine-folder" key=${f ? f.id : 'none'}>
         ${(f || folders.length > 0) && html`<${FolderHead} f=${f} g=${g} gi=${gi} count=${folders.length} shut=${shut} organise=${organise}
           onToggle=${() => setClosed({ ...closed, [f.id]: !closed[f.id] })} onMove=${d => change(p => moveFolder(p, f.id, d))} onEditFolder=${() => setFolderEdit(f)} onNew=${() => onNew(f.id)} />`}
-        ${!shut && (g.routines.length ? g.routines.map((r, i) => html`<${RoutineCard} key=${r.id} app=${app} r=${r} organise=${organise} first=${i === 0} last=${i === g.routines.length - 1} onEdit=${() => onEdit(r)} />`)
+        ${!shut && (g.routines.length ? html`<${FolderRoutines} app=${app} routines=${g.routines} organise=${organise} onEdit=${onEdit} />`
           : html`<p class="muted small folder-empty">No routines here yet.</p>`)}
       </section>`
     })}

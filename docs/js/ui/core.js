@@ -38,6 +38,7 @@ const ICONS = {
   bolt: 'M13 2 4 14h7l-1 8 9-12h-7z',
   calendar: 'M4 6h16v15H4zM4 10h16M8 3v4M16 3v4M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01',
   link: 'M9 15l6-6M10 6l1-1a4 4 0 0 1 6 6l-1 1M14 18l-1 1a4 4 0 0 1-6-6l1-1',
+  grip: 'M9 6h.5M15 6h.5M9 12h.5M15 12h.5M9 18h.5M15 18h.5',
   drop: 'M12 3c3.6 4.4 6 7.7 6 10.8a6 6 0 0 1-12 0C6 10.7 8.4 7.4 12 3z',
 }
 export const Icon = ({ name, size = 22, class: cls = '' }) => html`<svg class=${'ic ' + cls} viewBox="0 0 24 24" width=${size} height=${size} aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d=${ICONS[name] || ''} /></svg>`

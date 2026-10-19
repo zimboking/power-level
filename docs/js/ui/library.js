@@ -1,6 +1,6 @@
 // The exercise library: ~780 exercises with photos and muscles, searchable and filterable by
 // muscle (tap the body map) and equipment. Doubles as the picker inside a workout.
-import { html, useState, useEffect, useMemo, Sheet, Icon, Field, Segmented, Toggle, fmt, fmtDate } from './core.js'
+import { html, useState, useEffect, useMemo, Sheet, Icon, Field, Segmented, Toggle, ConfirmButton, fmt, fmtDate } from './core.js'
 import { Thumb, ExerciseDemo } from './media.js'
 import { BodyMap, ExerciseMuscles } from './bodymap.js'
 import { LineChart } from './charts.js'
@@ -9,6 +9,7 @@ import { MUSCLE_NAME, MAIN_MUSCLES } from '../muscles.js'
 import { exerciseHistory } from '../strength.js'
 import { uid } from '../store.js'
 import { TIME_UNITS } from '../duration.js'
+import { deleteCustomExercise, routinesUsing } from '../routines.js'
 
 const EQ_FILTERS = [
   { value: 'all', label: 'All' }, { value: 'barbell', label: 'Barbell' }, { value: 'dumbbell', label: 'Dumbbell' },
@@ -22,7 +23,7 @@ export function useLibrary(app) {
   useEffect(() => { loadCatalog().then(c => { setCatalog(c); setState('ready') }, () => setState('offline')) }, [])
   return useMemo(() => {
     const coreFdb = new Set(EXERCISES.map(e => e.fdb))
-    const mine = Object.values(app.state.profile.exercises || {})
+    const mine = Object.values(app.state.profile.exercises || {}).filter(e => !e.hidden) // deleted ones stay for history only
     const mineIds = new Set(mine.map(e => e.id))
     const list = [...EXERCISES, ...mine.filter(e => !EX_IDS.has(e.id)), ...catalog.filter(c => !coreFdb.has(c.fdb) && !mineIds.has(c.id))]
     return { list, state }
@@ -63,6 +64,11 @@ export function ExerciseDetail({ ex, app, open, onClose, onAdd }) {
     <div class="card-flat"><p class="section-label">Muscles worked</p><${ExerciseMuscles} ex=${ex} sex=${sex} size="md" /></div>
     ${ex.cues?.length > 0 && html`<div class="card-flat"><p class="section-label">Think about</p><ol class="cues">${ex.cues.map(c => html`<li>${c}</li>`)}</ol></div>`}
     ${ins?.length > 0 && html`<div class="card-flat"><p class="section-label">How to</p><ol class="cues">${ins.map(c => html`<li>${c}</li>`)}</ol></div>`}
+    ${ex.custom && !ex.hidden && (() => {
+      const n = routinesUsing(app.state.profile, ex.id)
+      return html`<div class="card-flat"><p class="muted small">You made this one. Deleting it removes it from the library${n ? ` and from ${n} ${n === 1 ? 'routine' : 'routines'}` : ''}. Workouts you've logged keep it.</p>
+        <${ConfirmButton} class="btn ghost danger-text" confirmText="Tap again to delete" onConfirm=${() => { app.update(s => ({ ...s, profile: deleteCustomExercise(s.profile, ex.id) }), ['profile']); app.toast(`${ex.name} deleted`); onClose() }}>Delete exercise</${ConfirmButton}></div>`
+    })()}
   </${Sheet}>`
 }
 

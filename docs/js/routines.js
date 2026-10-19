@@ -1,6 +1,8 @@
 // Routines and their folders. Routines live in profile.templates, in the order you see them;
 // a routine's `folder` is the id of one of profile.folders ([{ id, name }], also in order).
 // A routine with no folder, or one whose folder was deleted, is unfiled.
+import { exInfo } from './exercises.js'
+import { startCfg } from './plan.js'
 
 export const FOLDER_MAX = 40
 
@@ -94,3 +96,27 @@ export function deleteRoutine(profile, id) {
   const keep = obj => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v !== id))
   return { ...next, plan: { ...plan, days: keep(plan.days), overrides: keep(plan.overrides), rotation: (plan.rotation || []).filter(r => r !== id) } }
 }
+
+/** Puts a different exercise in a routine slot, keeping its place, sets, effort, rest and superset. */
+export function replaceItem(item, exId, ex, settings) {
+  const sameKind = (ex?.mode === 'time') === (exInfo(item.exId).mode === 'time')
+  const { pyramid, pyramidSets, ...keep } = item
+  return { ...keep, ...(sameKind ? {} : startCfg(ex, settings)), sets: item.sets, exId, ...(sameKind ? {} : { prog: undefined }) }
+}
+
+/**
+ * Deletes one of your own exercises: it leaves the library and your routines, but stays known
+ * (hidden) so past workouts still show its name and history.
+ */
+export function deleteCustomExercise(profile, id) {
+  const ex = profile.exercises?.[id]
+  if (!ex?.custom) return profile
+  return {
+    ...profile,
+    exercises: { ...profile.exercises, [id]: { ...ex, hidden: true } },
+    templates: routinesOf(profile).map(r => (r.items.some(i => i.exId === id) ? { ...r, items: r.items.filter(i => i.exId !== id) } : r)),
+  }
+}
+
+/** How many routines use an exercise. */
+export const routinesUsing = (profile, id) => routinesOf(profile).filter(r => r.items.some(i => i.exId === id)).length
