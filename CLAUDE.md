@@ -37,6 +37,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/schedule.js` | Weekly / rotation plans, overrides, next session, starter plans |
 | `js/routines.js` | Routine folders (`profile.folders`, `routine.folder`), reordering, saving |
 | `js/records.js` | Records per exercise (1RM, heaviest, reps at a weight, volume, hold) and exercise notes |
+| `js/duration.js` | Timed exercises: stored in seconds, shown in s / min / h per exercise (`timeUnit`, `settings.timeUnits`) |
 | `js/share.js` | Routine share links (`#routine=…`, base64url JSON); decoding checks every field |
 | `js/muscles.js`, `js/stats.js` | Muscle-map maths, heatmap, streaks, strength balance |
 | `js/nutrition.js` | Quick-pick foods (estimates, `src: 'est'`), Mifflin-St Jeor targets, kcal/kJ |
@@ -57,7 +58,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```

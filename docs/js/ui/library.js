@@ -8,6 +8,7 @@ import { EXERCISES, loadCatalog, instructionsFor, EQUIPMENT_NAMES } from '../exe
 import { MUSCLE_NAME, MAIN_MUSCLES } from '../muscles.js'
 import { exerciseHistory } from '../strength.js'
 import { uid } from '../store.js'
+import { TIME_UNITS } from '../duration.js'
 
 const EQ_FILTERS = [
   { value: 'all', label: 'All' }, { value: 'barbell', label: 'Barbell' }, { value: 'dumbbell', label: 'Dumbbell' },
@@ -30,14 +31,15 @@ export function useLibrary(app) {
 const EX_IDS = new Set(EXERCISES.map(e => e.id))
 
 function NewExercise({ open, onClose, onSave }) {
-  const [f, setF] = useState({ name: '', eq: 'machine', p: 'chest', mode: 'reps', uni: false })
-  const save = e => { e.preventDefault(); if (!f.name.trim()) return; onSave({ id: 'c:' + uid(), name: f.name.trim(), eq: f.eq, p: [f.p], s: [], mode: f.mode, uni: f.uni, cues: [], custom: true }); setF({ ...f, name: '' }) }
+  const [f, setF] = useState({ name: '', eq: 'machine', p: 'chest', mode: 'reps', uni: false, timeUnit: 's' })
+  const save = e => { e.preventDefault(); if (!f.name.trim()) return; onSave({ id: 'c:' + uid(), name: f.name.trim(), eq: f.eq, p: [f.p], s: [], mode: f.mode, uni: f.uni, cues: [], custom: true, ...(f.mode === 'time' ? { timeUnit: f.timeUnit } : {}) }); setF({ ...f, name: '' }) }
   return html`<${Sheet} open=${open} title="New exercise" onClose=${onClose}>
     <form class="stack" onSubmit=${save}>
       <${Field} label="Name"><input id="nx-name" class="input" value=${f.name} onInput=${e => setF({ ...f, name: e.target.value })} placeholder="e.g. Hammer Strength chest press" /></${Field}>
       <${Field} label="Equipment"><select id="nx-eq" class="input" value=${f.eq} onChange=${e => setF({ ...f, eq: e.target.value })}>${Object.entries(EQUIPMENT_NAMES).map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></${Field}>
       <${Field} label="Main muscle"><select id="nx-p" class="input" value=${f.p} onChange=${e => setF({ ...f, p: e.target.value })}>${MAIN_MUSCLES.map(m => html`<option value=${m}>${MUSCLE_NAME[m]}</option>`)}</select></${Field}>
       <${Field} label="Logged by"><${Segmented} small label="Logged by" value=${f.mode} onChange=${v => setF({ ...f, mode: v })} options=${[{ value: 'reps', label: 'Weight × reps' }, { value: 'time', label: 'Time' }]} /></${Field}>
+      ${f.mode === 'time' && html`<${Field} label="Time in" hint="Seconds for holds like a plank; minutes or hours for runs, rides and rows."><${Segmented} small label="Time in" value=${f.timeUnit} onChange=${v => setF({ ...f, timeUnit: v })} options=${Object.entries(TIME_UNITS).map(([value, u]) => ({ value, label: u.label }))} /></${Field}>`}
       <div class="group"><${Toggle} id="nx-uni" checked=${f.uni} onChange=${v => setF({ ...f, uni: v })} label="One side at a time" hint="Reps are logged per side, volume counts both." /></div>
       <button class="btn primary">Add exercise</button>
     </form>
@@ -79,7 +81,7 @@ export function Library({ app, onPick, pickLabel }) {
     .sort((a, b) => (used.has(b.id) - used.has(a.id)) || (EX_IDS.has(b.id) - EX_IDS.has(a.id)) || a.name.localeCompare(b.name))
   const choose = ex => {
     if (!EX_IDS.has(ex.id)) app.registerExercise(ex)
-    if (onPick) onPick(ex.id); else setDetail(ex)
+    if (onPick) onPick(ex.id, ex); else setDetail(ex)
   }
   return html`<div class="stack">
     <div class="search"><${Icon} name="list" size=${18} /><input id="lib-q" type="search" placeholder=${`Search ${list.length} exercises`} value=${q} onInput=${e => { setQ(e.target.value); setLimit(60) }} /></div>
@@ -100,10 +102,10 @@ export function Library({ app, onPick, pickLabel }) {
     </div>
     ${filtered.length > limit && html`<button class="btn" onClick=${() => setLimit(limit + 60)}>Show more (${filtered.length - limit})</button>`}
     <${ExerciseDetail} ex=${detail} app=${app} open=${!!detail} onClose=${() => setDetail(null)} onAdd=${onPick ? ex => { setDetail(null); choose(ex) } : null} />
-    <${NewExercise} open=${adding} onClose=${() => setAdding(false)} onSave=${ex => { app.registerExercise(ex); setAdding(false); if (onPick) onPick(ex.id) }} />
+    <${NewExercise} open=${adding} onClose=${() => setAdding(false)} onSave=${ex => { app.registerExercise(ex); setAdding(false); if (onPick) onPick(ex.id, ex) }} />
   </div>`
 }
 
 export function LibrarySheet({ open, onClose, app, onPick, title = 'Add exercise' }) {
-  return html`<${Sheet} open=${open} title=${title} onClose=${onClose} tall>${open && html`<${Library} app=${app} onPick=${id => { onPick(id); onClose() }} />`}</${Sheet}>`
+  return html`<${Sheet} open=${open} title=${title} onClose=${onClose} tall>${open && html`<${Library} app=${app} onPick=${(id, ex) => { onPick(id, ex); onClose() }} />`}</${Sheet}>`
 }

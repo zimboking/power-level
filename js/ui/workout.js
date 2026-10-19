@@ -5,8 +5,9 @@ import { ExerciseCard } from './exercise-card.js'
 import { LibrarySheet } from './library.js'
 import { RoutineEditor } from './plan-tab.js'
 import { groupRoutines, saveRoutine as storeRoutine } from '../routines.js'
-import { buildEntry, DEFAULT_CFG, entriesFor } from '../plan.js'
+import { buildEntry, DEFAULT_CFG, entriesFor, startCfg } from '../plan.js'
 import { recordsBroken } from '../records.js'
+import { fmtDuration } from '../duration.js'
 import { FEELINGS, workoutVolume } from '../strength.js'
 import { liftedComparison, formatKg } from '../power.js'
 import { exInfo } from '../exercises.js'
@@ -85,7 +86,7 @@ const RECORD_TEXT = {
   weight: r => `Heaviest: ${fmt(r.value)} kg (was ${fmt(r.prev)})`,
   reps: r => `${r.value} reps${r.w > 0 ? ` at ${fmt(r.w)} kg` : ''} (was ${r.prev})`,
   volume: r => `Volume: ${formatKg(r.value)} (was ${formatKg(r.prev)})`,
-  time: r => `Longest hold: ${fmtClock(r.value)} (was ${fmtClock(r.prev)})`,
+  time: r => `Longest: ${fmtDuration(r.value)} (was ${fmtDuration(r.prev)})`,
 }
 
 function Summary({ result, onDone }) {
@@ -147,8 +148,9 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
     const allDone = !doneSet.warmup && entry.sets.filter(s => !s.warmup && !s.done).length <= 1
     if (view === 'focus' && group.length < 2 && allDone && i < entries.length - 1) setTimeout(() => app.toast({ text: `${exInfo(entry.exId).name} done`, action: { label: 'Next exercise', run: () => goTo(i + 1) } }), 50)
   }
-  const add = exId => {
-    const e = buildEntry({ exId, cfg: DEFAULT_CFG, workouts, profile, feeling: session.feeling, todayIso: session.date, withWarmups: false })
+  const add = (exId, picked) => {
+    const ex = picked || exInfo(exId)
+    const e = buildEntry({ exId, cfg: ex.mode === 'time' ? { ...DEFAULT_CFG, ...startCfg(ex, profile.settings) } : DEFAULT_CFG, workouts, profile, feeling: session.feeling, todayIso: session.date, withWarmups: false })
     if (picker?.swap != null) { const i = picker.swap; setEntries(entries.map((x, j) => (j === i ? { ...e, group: x.group } : x)), { focus: i }) }
     else setEntries([...entries, e], { focus: entries.length })
     setPicker(null)

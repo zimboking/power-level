@@ -9,6 +9,7 @@ import { exInfo, stepFor, usesPlates, barWeight, BAR_TYPES, EQUIPMENT_NAMES, isT
 import { POLICIES, effortLabel } from '../progression.js'
 import { policyOf, lastTimeLine, bestEverE1rm, entriesFor } from '../plan.js'
 import { bestsOf, repsAtLeast, lastNoteFor } from '../records.js'
+import { TIME_UNITS, timeUnitOf } from '../duration.js'
 import { MUSCLE_NAME } from '../muscles.js'
 import { primeAudio } from './rest.js'
 
@@ -46,6 +47,8 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
   const ex = exInfo(entry.exId)
   const step = stepFor(ex)
   const timed = isTimed(ex), bw = isBodyweight(ex)
+  const unit = timeUnitOf(ex, profile.settings)
+  const [unitSheet, setUnitSheet] = useState(false)
   const scale = settings.effort === 'rpe' ? 'rpe' : 'rir'
   const showEffort = settings.showEffort !== false
   const bar = barWeight(ex, settings)
@@ -132,11 +135,11 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
       <b>${policy === 'goal' ? 'Goal journey' : POLICIES[policy]?.name}</b> · ${entry.target.why}</p>
 
     <div class="sets-box">
-      <div class=${'set-row set-head' + (showEffort ? '' : ' no-effort')} aria-hidden="true"><span></span><span>${bw ? '+KG' : 'WEIGHT (KG)'}</span><span>${timed ? 'SECONDS' : ex.uni ? 'REPS/SIDE' : 'REPS'}</span>${showEffort && html`<span>${scale.toUpperCase()}</span>`}<span></span></div>
+      <div class=${'set-row set-head' + (showEffort ? '' : ' no-effort')} aria-hidden="true"><span></span><span>${bw ? '+KG' : 'WEIGHT (KG)'}</span><span>${timed ? TIME_UNITS[unit].head : ex.uni ? 'REPS/SIDE' : 'REPS'}</span>${showEffort && html`<span>${scale.toUpperCase()}</span>`}<span></span></div>
       ${entry.sets.map((st, i) => {
         const tag = st.warmup ? 'W' : String(++workNo)
         const est = !st.warmup && !timed && st.r > 0 && st.w > 0 ? e1rm(st.w, st.r, st.rir ?? entry.cfg.rir) : null
-        return html`<${SetRow} key=${i + '-' + entry.sets.length} set=${st} tag=${tag} ex=${ex} step=${step} scale=${scale} showEffort=${showEffort} timed=${timed} bodyweight=${bw} perSide=${ex.uni}
+        return html`<${SetRow} key=${i + '-' + entry.sets.length} set=${st} tag=${tag} ex=${ex} step=${step} scale=${scale} showEffort=${showEffort} timed=${timed} unit=${unit} bodyweight=${bw} perSide=${ex.uni}
           est=${st.done ? est : null} isPr=${isRecord(st)} plates=${i === platesIdx || plateIdx === i} platesOpen=${plateIdx === i} onPlates=${() => setPlateIdx(plateIdx === i ? null : i)}
           onPatch=${p => patchSet(i, p)} onToggle=${() => toggleDone(i)} onDelete=${() => removeSet(i)} onCopy=${() => copySet(i)} onMenu=${() => setSetMenuIdx(i)} onEffort=${() => setEffortIdx(i)} />
           ${plateIdx === i && html`<${PlateBar} weight=${st.w} bar=${bar} plates=${settings.plates} label=${BAR_TYPES[ex.eq]} />`}`
@@ -159,6 +162,7 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
       { label: 'Progression rule', icon: 'up', hint: policy === 'goal' ? 'Set by your goal' : POLICIES[policy]?.name, onClick: () => setProgSheet(true) },
       { label: entry.cfg.pyramid ? 'Turn off pyramid sets' : 'Pyramid sets', icon: 'stats', hint: 'Own weight, reps and rest per set', onClick: () => setCfg({ pyramid: !entry.cfg.pyramid }) },
       { label: 'Rest time', icon: 'timer', hint: fmtClock(entry.cfg.rest || settings.rest || 150), onClick: () => setRestFor('exercise') },
+      timed && { label: 'Time in', icon: 'timer', hint: TIME_UNITS[unit].label, onClick: () => setUnitSheet(true) },
       index > 0 && { label: 'Move up', icon: 'up', onClick: () => onMove(-1) },
       index < count - 1 && { label: 'Move down', icon: 'down', onClick: () => onMove(1) },
       { label: 'Remove exercise', icon: 'trash', danger: true, onClick: onRemove },
@@ -184,5 +188,10 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
       <p class="muted small">Takes effect from the next session. Save the workout as a routine to keep it.</p>`}
     </${Sheet}>
     <${InfoSheet} ex=${ex} open=${info} onClose=${() => setInfo(false)} sex=${settings.sex} />
+    <${Sheet} open=${unitSheet} title=${'Time in, for ' + ex.name} onClose=${() => setUnitSheet(false)}>
+      <div class="group">${Object.entries(TIME_UNITS).map(([k, u]) => html`<button class=${'row-btn' + (unit === k ? ' on' : '')} onClick=${() => { app.setSetting({ timeUnits: { ...(settings.timeUnits || {}), [ex.id]: k } }); setUnitSheet(false) }}>
+        <span class="row-main"><span>${u.label}</span></span>${unit === k && html`<${Icon} name="check" />`}</button>`)}</div>
+      <p class="muted small">Only changes how this exercise is shown and entered. Your logged times stay as they are.</p>
+    </${Sheet}>
   </article>`
 }

@@ -77,7 +77,7 @@ export function loadCatalog() {
   return catalogPromise
 }
 // What gets stored in profile.exercises when you pick a catalogue exercise (no long instructions).
-export const registryEntry = ex => ({ id: ex.id, name: ex.name, eq: ex.eq, p: ex.p, s: ex.s, fdb: ex.fdb, img: ex.img, mode: ex.mode, uni: ex.uni, cues: [], custom: ex.custom || false })
+export const registryEntry = ex => ({ id: ex.id, name: ex.name, eq: ex.eq, p: ex.p, s: ex.s, fdb: ex.fdb, img: ex.img, mode: ex.mode, uni: ex.uni, cues: [], custom: ex.custom || false, ...(ex.timeUnit ? { timeUnit: ex.timeUnit } : {}) })
 
 // Core exercises show their dataset instructions too, once the catalogue has loaded.
 export async function instructionsFor(ex) {

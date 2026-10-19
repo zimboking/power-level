@@ -2,6 +2,7 @@
 // Effort is optional and colour-coded, shown as RIR or RPE.
 import { html, useState, Stepper, Sheet, Icon, useSwipe, fmt } from './core.js'
 import { EFFORT, effortLabel, effortTone } from '../progression.js'
+import { TIME_UNITS, toUnit, fromUnit } from '../duration.js'
 
 export function EffortSheet({ open, scale, value, onPick, onClose }) {
   return html`<${Sheet} open=${open} title=${scale === 'rpe' ? 'How hard was it? (RPE)' : 'Reps in reserve (RIR)'} onClose=${onClose}>
@@ -13,7 +14,7 @@ export function EffortSheet({ open, scale, value, onPick, onClose }) {
   </${Sheet}>`
 }
 
-export function SetRow({ set, tag, ex, step, scale, showEffort, timed, bodyweight, perSide, est, isPr, onPatch, onToggle, onDelete, onCopy, onMenu, onEffort, plates, platesOpen, onPlates }) {
+export function SetRow({ set, tag, ex, step, scale, showEffort, timed, unit = 's', bodyweight, perSide, est, isPr, onPatch, onToggle, onDelete, onCopy, onMenu, onEffort, plates, platesOpen, onPlates }) {
   const { dx, handlers } = useSwipe({ onLeft: onDelete, onRight: onCopy })
   return html`<div class="set-wrap"><div class="set-swipe">
     <div class="swipe-bg" aria-hidden="true"><span class="sw-copy"><${Icon} name="copy" size=${18} /> Copy</span><span class="sw-del">Delete <${Icon} name="trash" size=${18} /></span></div>
@@ -22,7 +23,7 @@ export function SetRow({ set, tag, ex, step, scale, showEffort, timed, bodyweigh
       ${bodyweight && !(set.w > 0) && !timed
         ? html`<button class="bw-add" onClick=${() => onPatch({ w: step })} aria-label="Add weight (dip belt)">BW<small>+ kg</small></button>`
         : html`<${Stepper} label=${bodyweight ? 'Added weight' : 'Weight'} value=${set.w} step=${step} onChange=${v => onPatch({ w: v })} />`}
-      ${timed ? html`<${Stepper} label="Seconds" value=${set.sec} step=${5} onChange=${v => onPatch({ sec: v })} unit="s" />`
+      ${timed ? html`<${Stepper} label=${TIME_UNITS[unit].label} value=${toUnit(set.sec, unit)} step=${TIME_UNITS[unit].step} onChange=${v => onPatch({ sec: fromUnit(v, unit) })} unit=${TIME_UNITS[unit].short} />`
         : html`<${Stepper} label=${perSide ? 'Reps per side' : 'Reps'} value=${set.r} step=${1} onChange=${v => onPatch({ r: v })} />`}
       ${showEffort && (set.warmup ? html`<span aria-hidden="true"></span>`
         : html`<button class=${'effort-btn ' + effortTone(set.rir)} onClick=${onEffort}>${effortLabel(set.rir, scale).replace(' ', ' ')}</button>`)}

@@ -1,6 +1,7 @@
 // Progression rules, per routine or per exercise. Every target is derived from the log, says why
 // it is that number, never adds load after missed reps, and deloads after repeated stalls.
 import { nextSessionTarget, isWork, setDone, snap, round1, e1rm, weightFor } from './strength.js'
+import { fmtDuration } from './duration.js'
 
 export const POLICIES = {
   double: { name: 'Double progression', desc: 'Work up through the rep range at one weight. Top of the range on every set → more weight, back to the bottom.' },
@@ -84,10 +85,12 @@ function timeTarget(history, cfg) {
   const last = history[history.length - 1]
   const sets = cfg.sets || 3
   const base = last?.target?.sec || cfg.sec || 30
-  if (!workSets(last).length) return { w: 0, sec: base, sets, kind: 'first', why: `Hold each set for ${base} s.` }
-  if (sessionHit(last, { ...cfg, mode: 'time' })) return { w: 0, sec: base + 5, sets, kind: 'up', why: `Held every set for ${base} s. Up to ${base + 5} s.` }
-  if (stallCount(history, { ...cfg, mode: 'time' }) >= 3) return { w: 0, sec: Math.max(10, Math.round(base * DELOAD / 5) * 5), sets, kind: 'deload', why: 'Short three times running. Back off and build again.' }
-  return { w: 0, sec: base, sets, kind: 'hold', why: `Short of ${base} s last time. Same target.` }
+  const grow = cfg.timeGrow || 5 // 5 s for holds, a minute or more for long efforts
+  const d = fmtDuration
+  if (!workSets(last).length) return { w: 0, sec: base, sets, kind: 'first', why: `Aim for ${d(base)} each set.` }
+  if (sessionHit(last, { ...cfg, mode: 'time' })) return { w: 0, sec: base + grow, sets, kind: 'up', why: `Every set reached ${d(base)}. Up to ${d(base + grow)}.` }
+  if (stallCount(history, { ...cfg, mode: 'time' }) >= 3) return { w: 0, sec: Math.max(10, Math.round(base * DELOAD / grow) * grow), sets, kind: 'deload', why: 'Short three times running. Back off and build again.' }
+  return { w: 0, sec: base, sets, kind: 'hold', why: `Short of ${d(base)} last time. Same target.` }
 }
 
 // Effort: stored as RIR, shown as RIR or RPE (RPE = 10 − RIR).

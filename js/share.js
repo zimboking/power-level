@@ -19,7 +19,7 @@ function fromBase64Url(s) {
 }
 
 const ITEM_KEYS = ['exId', 'sets', 'repsMin', 'repsMax', 'rir', 'rest', 'prog', 'group', 'pyramid']
-const EX_KEYS = ['id', 'name', 'eq', 'p', 's', 'fdb', 'img', 'mode', 'uni', 'custom']
+const EX_KEYS = ['id', 'name', 'eq', 'p', 's', 'fdb', 'img', 'mode', 'uni', 'custom', 'timeUnit']
 
 /**
  * routine: { name, items }. lookup(exId) gives the stored details of a catalogue or custom
@@ -45,8 +45,9 @@ const muscles = v => (Array.isArray(v) ? v.filter(m => typeof m === 'string' && 
 
 function cleanItem(it) {
   if (!it || !ID_RE.test(it.exId)) return null
-  const repsMin = num(it.repsMin, 1, 600, 8)
-  const out = { exId: it.exId, sets: num(it.sets, 1, 20, 3), repsMin, repsMax: Math.max(repsMin, num(it.repsMax, 1, 600, repsMin)), rir: num(it.rir, 0, 5, 2) }
+  // Reps, or seconds for timed exercises (up to a day).
+  const repsMin = num(it.repsMin, 1, 86400, 8)
+  const out = { exId: it.exId, sets: num(it.sets, 1, 20, 3), repsMin, repsMax: Math.max(repsMin, num(it.repsMax, 1, 86400, repsMin)), rir: num(it.rir, 0, 5, 2) }
   if (it.rest != null) out.rest = num(it.rest, 15, 1800, 150)
   if (PROGS.includes(it.prog)) out.prog = it.prog
   if (typeof it.group === 'string' && /^[a-z0-9]{1,8}$/i.test(it.group)) out.group = it.group
@@ -62,6 +63,7 @@ function cleanExercise(e, wanted) {
     id: e.id, name, eq: EQUIPMENT.includes(e.eq) ? e.eq : 'other', p: muscles(e.p), s: muscles(e.s),
     ...(typeof e.fdb === 'string' && /^[A-Za-z0-9_()'.,+-]{1,100}$/.test(e.fdb) ? { fdb: e.fdb, img: num(e.img, 1, 4, 2) } : {}),
     mode: e.mode === 'time' ? 'time' : 'reps', uni: e.uni === true, cues: [], custom: e.custom === true,
+    ...(e.mode === 'time' && ['s', 'min', 'h'].includes(e.timeUnit) ? { timeUnit: e.timeUnit } : {}),
   }
 }
 

@@ -4,8 +4,16 @@ import { applyFeeling, currentE1rm, exerciseHistory, warmupSets, bestE1rm, feeli
 import { nextTarget, POLICIES } from './progression.js'
 import { planJourney, guessLevel } from './journey.js'
 import { exInfo, stepFor, isTimed, isBodyweight, barWeight } from './exercises.js'
+import { TIME_UNITS, timeUnitOf, fmtDuration, START_SECONDS } from './duration.js'
 
 export const DEFAULT_CFG = { sets: 3, repsMin: 6, repsMax: 10, rir: 2 }
+
+/** Starting sets and reps (or time) for an exercise you've just added. */
+export function startCfg(ex, settings) {
+  if (ex?.mode !== 'time') return { sets: 3, repsMin: 8, repsMax: 12, rir: 2 }
+  const sec = START_SECONDS[timeUnitOf(ex, settings)]
+  return { sets: 3, repsMin: sec, repsMax: sec, rir: 2 }
+}
 
 export function weeksSince(isoStart, isoNow) {
   const ms = new Date(isoNow + 'T00:00:00') - new Date(isoStart + 'T00:00:00')
@@ -49,7 +57,7 @@ export function targetFor({ exId, cfg = DEFAULT_CFG, workouts, profile, feeling,
   }
   if (!target) {
     const history = entriesFor(workouts, exId).filter(e => e.sets?.some(s => s.done && !s.warmup))
-    target = nextTarget(history, { ...cfg, policy: policyOf(cfg, ex), mode: ex.mode, sec: cfg.sec || cfg.repsMin }, step)
+    target = nextTarget(history, { ...cfg, policy: policyOf(cfg, ex), mode: ex.mode, sec: cfg.sec || cfg.repsMin, timeGrow: TIME_UNITS[timeUnitOf(ex, profile?.settings)].grow }, step)
   }
   // Bodyweight work carries no load: progress reps (or strap on a dip belt).
   if (isBodyweight(ex) && !(target.w > 0) && target.kind === 'up' && !isTimed(ex)) {
@@ -91,7 +99,7 @@ export const bestEverE1rm = (workouts, exId) => exerciseHistory(workouts, exId).
 export function lastTimeLine(workouts, exId, scaleLabel) {
   const last = lastEntryFor(workouts, exId)
   if (!last) return null
-  const sets = last.sets.filter(s => s.done && !s.warmup).map(s => (s.sec ? `${s.w ? s.w + ' kg × ' : ''}${s.sec}s` : `${s.w ? s.w + '×' : ''}${s.r}${s.rir != null ? ` (${scaleLabel(s.rir)})` : ''}`))
+  const sets = last.sets.filter(s => s.done && !s.warmup).map(s => (s.sec ? `${s.w ? s.w + ' kg × ' : ''}${fmtDuration(s.sec)}` : `${s.w ? s.w + '×' : ''}${s.r}${s.rir != null ? ` (${scaleLabel(s.rir)})` : ''}`))
   return { date: last.date, text: sets.join(', ') }
 }
 export { bestE1rm }

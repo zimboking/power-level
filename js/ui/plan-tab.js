@@ -10,6 +10,8 @@ import { DAY_NAMES, emptyPlan, plannedFor, applyStarter, addDays, weekOf, moveSe
 import { MUSCLE_NAME } from '../muscles.js'
 import { uid, today, isStandalone } from '../store.js'
 import { shareRoutine } from './share-sheet.js'
+import { TIME_UNITS, timeUnitOf, toUnit, fromUnit, fmtDuration } from '../duration.js'
+import { startCfg } from '../plan.js'
 import { groupRoutines, addFolder, renameFolder, deleteFolder, moveFolder, moveRoutine, setRoutineFolder, saveRoutine, deleteRoutine } from '../routines.js'
 
 const REST_OPTS = [30, 45, 60, 75, 90, 120, 150, 180, 210, 240, 300, 360, 480, 600, 900]
@@ -25,19 +27,21 @@ export function routineMuscles(routine) {
 }
 const levelsOf = counts => { const max = Math.max(1, ...Object.values(counts)); return Object.fromEntries(Object.entries(counts).map(([m, v]) => [m, Math.max(1, Math.ceil((v / max) * 4))])) }
 
-function ItemRow({ it, i, n, onChange, onMove, onRemove, linked, onLink }) {
+function ItemRow({ it, i, n, onChange, onMove, onRemove, linked, onLink, settings }) {
   const ex = exInfo(it.exId)
   const timed = ex.mode === 'time'
+  const unit = timeUnitOf(ex, settings)
   const [open, setOpen] = useState(false)
   return html`<div class=${'item-row' + (it.group ? ' in-superset' : '')}>
     <button class="item-head" onClick=${() => setOpen(!open)} aria-expanded=${open}>
-      <${Thumb} ex=${ex} /><span class="row-main"><span>${ex.name}</span><small>${it.sets} × ${timed ? `${it.repsMin}s` : `${it.repsMin}${it.repsMax !== it.repsMin ? '–' + it.repsMax : ''}`} · ${it.pyramid ? 'pyramid' : POLICIES[it.prog]?.name || (timed ? 'Add time' : 'Double progression')}${it.rest ? ' · rest ' + fmtClock(it.rest) : ''}</small></span>
+      <${Thumb} ex=${ex} /><span class="row-main"><span>${ex.name}</span><small>${it.sets} × ${timed ? fmtDuration(it.repsMin) : `${it.repsMin}${it.repsMax !== it.repsMin ? '–' + it.repsMax : ''}`} · ${it.pyramid ? 'pyramid' : POLICIES[it.prog]?.name || (timed ? 'Add time' : 'Double progression')}${it.rest ? ' · rest ' + fmtClock(it.rest) : ''}</small></span>
       <${Icon} name=${open ? 'up' : 'down'} size=${18} />
     </button>
     ${open && html`<div class="item-edit">
       <div class="row-3">
         <${Field} label="Sets"><${Stepper} label="Sets" value=${it.sets} step=${1} min=${1} onChange=${v => onChange({ ...it, sets: Math.max(1, v) })} /></${Field}>
-        <${Field} label=${timed ? 'Seconds' : 'Reps from'}><${Stepper} label="Reps from" value=${it.repsMin} step=${timed ? 5 : 1} min=${1} onChange=${v => onChange({ ...it, repsMin: v, repsMax: Math.max(v, it.repsMax) })} /></${Field}>
+        ${timed ? html`<${Field} label=${TIME_UNITS[unit].label}><${Stepper} label=${TIME_UNITS[unit].label} value=${toUnit(it.repsMin, unit)} step=${TIME_UNITS[unit].step} min=${0} onChange=${v => { const sec = fromUnit(v, unit); onChange({ ...it, repsMin: sec, repsMax: Math.max(sec, it.repsMax) }) }} /></${Field}>`
+          : html`<${Field} label="Reps from"><${Stepper} label="Reps from" value=${it.repsMin} step=${1} min=${1} onChange=${v => onChange({ ...it, repsMin: v, repsMax: Math.max(v, it.repsMax) })} /></${Field}>`}
         ${!timed && html`<${Field} label="to"><${Stepper} label="Reps to" value=${it.repsMax} step=${1} min=${1} onChange=${v => onChange({ ...it, repsMax: Math.max(v, it.repsMin) })} /></${Field}>`}
       </div>
       <div class="row-2">
@@ -152,7 +156,7 @@ export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', o
     ${(!custom || keep) && html`<${FolderField} folders=${folders} value=${r.folder || ''} newName=${newFolder} onChange=${v => setR({ ...r, folder: v })} onNewName=${setNewFolder} />`}
     ${(custom || items.length < 3) && html`<${QuickFill} items=${items} onAdd=${add => setItems([...items, ...add])} />`}
     ${items.length > 0 && html`<div class="card-flat"><p class="section-label">Muscles this works</p><${BodyMap} levels=${levelsOf(routineMuscles(r))} sex=${app.state.profile.settings.sex} size="sm" label=${'Muscles worked by ' + r.name} /></div>`}
-    <div class="group">${items.map((it, i) => html`<${ItemRow} key=${it.exId + i} it=${it} i=${i} n=${items.length} linked=${!!it.group && items[i + 1]?.group === it.group}
+    <div class="group">${items.map((it, i) => html`<${ItemRow} key=${it.exId + i} it=${it} i=${i} n=${items.length} settings=${app.state.profile.settings} linked=${!!it.group && items[i + 1]?.group === it.group}
       onChange=${v => setItems(items.map((x, j) => (j === i ? v : x)))} onMove=${d => move(i, d)} onRemove=${() => setItems(items.filter((_, j) => j !== i))} onLink=${() => link(i)} />`)}
       <button class="row-btn" onClick=${() => setPick(true)}><span class="row-ic"><${Icon} name="plus" size=${20} /></span><span class="row-main"><span>Add exercise</span></span></button>
     </div>
@@ -165,7 +169,7 @@ export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', o
     ${!isNew && !custom && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to delete" onConfirm=${() => {
       app.update(s => ({ ...s, profile: deleteRoutine(s.profile, r.id) }), ['profile']); onClose()
     }}>Delete routine</${ConfirmButton}>`}
-    <${LibrarySheet} open=${pick} onClose=${() => setPick(false)} app=${app} onPick=${exId => setItems([...items, { exId, sets: 3, repsMin: exInfo(exId).mode === 'time' ? 30 : 8, repsMax: exInfo(exId).mode === 'time' ? 30 : 12, rir: 2 }])} />
+    <${LibrarySheet} open=${pick} onClose=${() => setPick(false)} app=${app} onPick=${(exId, ex) => setItems([...items, { exId, ...startCfg(ex || exInfo(exId), app.state.profile.settings) }])} />
   </${Sheet}>`
 }
 

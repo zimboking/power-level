@@ -113,7 +113,8 @@ function App() {
     toast: t => setToast(typeof t === 'string' ? { text: t } : t),
     update,
     setSetting: patch => update(s => ({ ...s, profile: { ...s.profile, settings: { ...s.profile.settings, ...patch } } }), ['profile']),
-    registerExercise: ex => update(s => (s.profile.exercises?.[ex.id] ? s : { ...s, profile: { ...s.profile, exercises: { ...(s.profile.exercises || {}), [ex.id]: registryEntry(ex) } } }), ['profile']),
+    // Known to exInfo at once, so a just-made exercise gets the right sets before the next render.
+    registerExercise: ex => { update(s => (s.profile.exercises?.[ex.id] ? s : { ...s, profile: { ...s.profile, exercises: { ...(s.profile.exercises || {}), [ex.id]: registryEntry(ex) } } }), ['profile']); setRegistry(stateRef.current.profile.exercises) },
     replaceAll(d) {
       const prev = stateRef.current
       // No water in the data (old backups, example data) keeps the CapySpa log already here.
