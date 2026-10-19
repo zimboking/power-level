@@ -55,7 +55,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```

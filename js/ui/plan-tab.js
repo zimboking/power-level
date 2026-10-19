@@ -6,7 +6,7 @@ import { BodyMap } from './bodymap.js'
 import { Thumb } from './media.js'
 import { exInfo, STARTER_PLANS, EXERCISES } from '../exercises.js'
 import { POLICIES } from '../progression.js'
-import { DAY_NAMES, emptyPlan, plannedFor, applyStarter, addDays, weekOf } from '../schedule.js'
+import { DAY_NAMES, emptyPlan, plannedFor, applyStarter, addDays, weekOf, moveSession } from '../schedule.js'
 import { MUSCLE_NAME } from '../muscles.js'
 import { uid, today } from '../store.js'
 import { groupRoutines, addFolder, renameFolder, deleteFolder, moveFolder, moveRoutine, setRoutineFolder, saveRoutine, deleteRoutine } from '../routines.js'
@@ -269,8 +269,9 @@ function WeekPlan({ app }) {
   const order = Array.from({ length: 7 }, (_, i) => (plan.weekStart + i) % 7)
   const days = Array.from({ length: 10 }, (_, i) => addDays(today(), i))
   const moveTo = (from, to, routine) => {
-    const ov = { ...(plan.overrides || {}), [from]: 'rest', [to]: routine.id }
-    setPlan({ overrides: ov }); setMoving(null); app.toast(`${routine.name} moved to ${fmtWeekday(to)}`)
+    const there = workouts.some(w => w.date === to) ? null : plannedFor(profile, workouts, to, today())
+    setPlan({ overrides: moveSession(profile, workouts, from, to, today()) }); setMoving(null)
+    app.toast(there ? `${routine.name} and ${there.name} swapped days` : `${routine.name} moved to ${fmtWeekday(to)}`)
   }
   return html`<div class="stack">
     <${Segmented} label="Plan type" value=${plan.mode} onChange=${m => setPlan({ mode: m })} options=${[{ value: 'weekly', label: 'Fixed days' }, { value: 'rotation', label: 'Rotation' }]} />
@@ -294,8 +295,12 @@ function WeekPlan({ app }) {
         ${plan.overrides?.[d] && html`<button class="text-btn" onClick=${() => { const ov = { ...plan.overrides }; delete ov[d]; setPlan({ overrides: ov }) }}>Undo</button>`}</div>`
     })}</div>
     <${Sheet} open=${!!moving} title=${moving ? 'Move ' + moving.routine.name : ''} onClose=${() => setMoving(null)}>
-      <p class="muted small">Moves this one session. Your weekly plan stays as it is.</p>
-      <div class="group">${moving && weekOf(moving.from, plan.weekStart).concat(weekOf(addDays(moving.from, 7), plan.weekStart)).filter(d => d >= today() && d !== moving.from).slice(0, 8).map(d => html`<button class="row-btn" onClick=${() => moveTo(moving.from, d, moving.routine)}><span class="row-main"><span>${fmtWeekday(d)}</span><small>${fmtDate(d)}</small></span></button>`)}</div>
+      <p class="muted small">Moves this one session. Your weekly plan stays as it is. Pick a day with a session on it and the two swap.</p>
+      <div class="group">${moving && weekOf(moving.from, plan.weekStart).concat(weekOf(addDays(moving.from, 7), plan.weekStart)).filter(d => d >= today() && d !== moving.from).slice(0, 8).map(d => {
+        const trained = workouts.some(w => w.date === d)
+        const there = trained ? null : plannedFor(profile, workouts, d, today())
+        return html`<button class="row-btn" onClick=${() => moveTo(moving.from, d, moving.routine)}><span class="row-main"><span>${fmtWeekday(d)}</span><small>${fmtDate(d)}${there ? ` · swap with ${there.name}` : trained ? ' · already trained' : ' · free'}</small></span></button>`
+      })}</div>
     </${Sheet}>
   </div>`
 }

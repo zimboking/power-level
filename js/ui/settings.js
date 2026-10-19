@@ -6,6 +6,7 @@ import { emptyPlan } from '../schedule.js'
 import { today, isStandalone, makeBackup, parseBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 import { capyOn } from '../water.js'
+import { listPhotos, putPhotos, makePhotoBackup, parsePhotoBackup, newPhotos } from '../photos.js'
 
 export function SettingsSheet({ open, onClose, app }) {
   const s = app.state.profile.settings
@@ -14,6 +15,8 @@ export function SettingsSheet({ open, onClose, app }) {
   const [msg, setMsg] = useState('')
   const [pending, setPending] = useState(null)
   const [restWheel, setRestWheel] = useState(false)
+  const [photoMsg, setPhotoMsg] = useState('')
+  const [photoBusy, setPhotoBusy] = useState(false)
   const standalone = isStandalone()
   const plan = { ...emptyPlan(), ...(app.state.profile.plan || {}) }
   const stamp = () => app.update(st => ({ ...st, profile: { ...st.profile, lastBackup: today() } }), ['profile'])
@@ -29,6 +32,30 @@ export function SettingsSheet({ open, onClose, app }) {
     if (!f) return
     if (f.size > 15e6) { setMsg('That file is too big to be a backup.'); return }
     f.text().then(readBackup, () => setMsg('Couldn’t read that file.'))
+  }
+  const exportPhotos = async () => {
+    setPhotoBusy(true); setPhotoMsg('')
+    try {
+      const photos = await listPhotos()
+      if (!photos.length) setPhotoMsg('No progress photos to back up yet.')
+      else { downloadFile(`power-level-photos-${today()}.json`, await makePhotoBackup(photos)); setPhotoMsg(`Saved ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'} to your downloads. Keep the file with your other backup.`) }
+    } catch { setPhotoMsg('Couldn’t read your photos in this browser.') }
+    setPhotoBusy(false)
+  }
+  const onPhotoFile = async e => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    if (f.size > 500e6) { setPhotoMsg('That file is too big to be a photo backup.'); return }
+    setPhotoBusy(true); setPhotoMsg('')
+    try {
+      let incoming
+      try { incoming = parsePhotoBackup(await f.text()) } catch { setPhotoMsg('That doesn’t look like a Power Level photo backup.'); setPhotoBusy(false); return }
+      const add = newPhotos(await listPhotos(), incoming)
+      if (add.length) await putPhotos(add)
+      setPhotoMsg(add.length ? `Added ${add.length} ${add.length === 1 ? 'photo' : 'photos'}. Photos already here were left alone.` : 'All of those photos are already here.')
+    } catch { setPhotoMsg('Couldn’t save the photos in this browser.') }
+    setPhotoBusy(false)
   }
   const num = (k, label, hint, obj = s, apply = v => set({ [k]: v })) => html`<${Field} label=${label} hint=${hint}><input id=${'set-' + k} class="input" inputmode="decimal" value=${obj[k] ?? ''} onChange=${e => apply(parseFloat(e.target.value) || null)} /></${Field}>`
   const bars = { ...DEFAULT_BARS, ...(s.bar ? { barbell: s.bar } : {}), ...(s.bars || {}) }
@@ -68,6 +95,9 @@ export function SettingsSheet({ open, onClose, app }) {
       ${standalone ? html`<div class="row-btns"><button class="btn primary" onClick=${exportData}>Download backup</button><label class="btn file-btn">Restore from file<input id="set-restore" type="file" accept="application/json,.json" onChange=${onFile} /></label></div>`
         : html`<div class="row-btns"><button class="btn" onClick=${exportData}>Copy export</button><button class="btn" disabled=${!json.trim()} onClick=${() => readBackup(json)}>Import pasted data</button></div>
         <textarea id="set-json" class="input" rows="3" placeholder="Paste an export here to import" value=${json} onInput=${e => setJson(e.target.value)}></textarea>`}
+      ${standalone && html`<p class="muted small">Progress photos are big, so they get their own file. Restoring adds the ones missing here and never deletes any.</p>
+        <div class="row-btns"><button class="btn" disabled=${photoBusy} onClick=${exportPhotos}>${photoBusy ? 'Working…' : 'Download photos'}</button><label class="btn file-btn">Restore photos<input id="set-restore-photos" type="file" accept="application/json,.json" disabled=${photoBusy} onChange=${onPhotoFile} /></label></div>
+        ${photoMsg && html`<p class="small" role="status">${photoMsg}</p>`}`}
       ${pending && html`<div class="callout"><p>This backup has <b>${pending.workouts.length} workouts</b>. Restoring replaces everything currently on this device.</p>
         <div class="row-btns"><${ConfirmButton} class="btn primary" confirmText="Tap again to replace" onConfirm=${() => { app.replaceAll(pending); setPending(null); setJson(''); setMsg('Restored from backup.') }}>Restore it</${ConfirmButton}><button class="btn ghost" onClick=${() => setPending(null)}>Cancel</button></div></div>`}
       ${msg && html`<p class="small" role="status">${msg}</p>`}

@@ -46,7 +46,7 @@ export function Photos() {
       ${photos.length >= 2 && html`<button class="btn" onClick=${() => setPair({ before: first, after: last })}>Before / after</button>`}
     </div>
     ${err && html`<p class="warn small">${err}</p>`}
-    ${photos.length === 0 ? html`<p class="muted small">Same spot, same light, every couple of weeks. Photos stay on this phone and aren't in your backup file.</p>`
+    ${photos.length === 0 ? html`<p class="muted small">Same spot, same light, every couple of weeks. Photos stay on this phone. Back them up from Settings with Download photos.</p>`
       : html`<div class="photo-strip">${[...photos].reverse().map(p => html`<button class="photo-thumb" onClick=${() => setView(p)}><img src=${urls[p.id]} alt=${'Progress photo, ' + fmtDate(p.date)} loading="lazy" /><span>${fmtDate(p.date)}</span></button>`)}</div>`}
     <${Sheet} open=${!!view} title=${view ? fmtDate(view.date) : ''} onClose=${() => setView(null)}>
       ${view && html`<img class="photo-full" src=${urls[view.id]} alt=${'Progress photo, ' + fmtDate(view.date)} />

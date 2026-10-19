@@ -119,3 +119,18 @@ test('custom workout quick fill picks sensible exercises per muscle group', asyn
   const ids = suggestItems(['Chest', 'Arms']).map(i => i.exId)
   assert.deepEqual(ids, ['bench', 'incline', 'curl', 'pushdown'])
 })
+
+test('moving a session onto a booked day swaps the two; onto a free day leaves a rest day', async () => {
+  const { moveSession, plannedFor } = await import('../js/schedule.js')
+  const profile = { templates: [{ id: 'push', name: 'Push', items: [] }, { id: 'pull', name: 'Pull', items: [] }], plan: { mode: 'weekly', days: { 1: 'push', 3: 'pull' }, weekStart: 1, overrides: {} } }
+  const mon = '2026-10-19', tue = '2026-10-20', wed = '2026-10-21'
+  const swapped = { ...profile, plan: { ...profile.plan, overrides: moveSession(profile, [], mon, wed, mon) } }
+  assert.equal(plannedFor(swapped, [], mon, mon).id, 'pull')
+  assert.equal(plannedFor(swapped, [], wed, mon).id, 'push')
+  const moved = { ...profile, plan: { ...profile.plan, overrides: moveSession(profile, [], mon, tue, mon) } }
+  assert.equal(plannedFor(moved, [], mon, mon), null)
+  assert.equal(plannedFor(moved, [], tue, mon).id, 'push')
+  // A day you've already trained on isn't swapped back.
+  const trained = moveSession(profile, [{ date: wed, entries: [] }], mon, wed, mon)
+  assert.equal(trained[mon], 'rest')
+})

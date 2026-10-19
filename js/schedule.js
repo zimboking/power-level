@@ -48,6 +48,18 @@ export function plannedFor(profile, workouts, iso, todayIso = iso) {
   return routineById(profile, plan.days?.[dow(iso)])
 }
 
+/**
+ * Moves one session from `from` to `to` as overrides. If `to` already has a session planned,
+ * the two swap days instead of one being lost.
+ */
+export function moveSession(profile, workouts, from, to, todayIso = from) {
+  const plan = { ...emptyPlan(), ...(profile.plan || {}) }
+  const moving = plannedFor(profile, workouts, from, todayIso)
+  if (!moving || from === to) return plan.overrides || {}
+  const there = workouts.some(w => w.date === to) ? null : plannedFor(profile, workouts, to, todayIso)
+  return { ...(plan.overrides || {}), [from]: there ? there.id : 'rest', [to]: moving.id }
+}
+
 /** Next planned session after `fromIso` (exclusive), within four weeks. */
 export function nextSession(profile, workouts, fromIso) {
   for (let i = 1; i <= 28; i++) {

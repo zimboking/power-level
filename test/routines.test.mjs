@@ -60,3 +60,13 @@ test('saving: edits replace in place, new routines join the end of their folder'
   assert.equal('folder' in saveRoutine(p, r('m', 'missing')).templates[5], false)
   assert.deepEqual(names(deleteRoutine(p, 'c')), ['Strength:a', 'Cardio:d', '-:be'])
 })
+
+test('deleting a routine takes it out of the weekly plan, rotation and moved sessions', () => {
+  const p = { ...base(), plan: { mode: 'weekly', days: { 1: 'a', 3: 'b', 5: 'a' }, rotation: ['a', 'b', 'a'], overrides: { '2026-10-20': 'a', '2026-10-21': 'rest' } } }
+  const next = deleteRoutine(p, 'a')
+  assert.deepEqual(next.plan.days, { 3: 'b' })
+  assert.deepEqual(next.plan.rotation, ['b'])
+  assert.deepEqual(next.plan.overrides, { '2026-10-21': 'rest' })
+  assert.equal(next.templates.some(r => r.id === 'a'), false)
+  assert.deepEqual(deleteRoutine({ templates: [r('x')] }, 'x'), { templates: [] })
+})

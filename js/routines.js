@@ -86,6 +86,11 @@ export function saveRoutine(profile, routine) {
     : { ...profile, templates: [...list, r] }
 }
 
+/** Deletes a routine and takes it out of the weekly plan, the rotation and any moved sessions. */
 export function deleteRoutine(profile, id) {
-  return { ...profile, templates: routinesOf(profile).filter(r => r.id !== id) }
+  const next = { ...profile, templates: routinesOf(profile).filter(r => r.id !== id) }
+  const plan = profile.plan
+  if (!plan) return next
+  const keep = obj => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v !== id))
+  return { ...next, plan: { ...plan, days: keep(plan.days), overrides: keep(plan.overrides), rotation: (plan.rotation || []).filter(r => r !== id) } }
 }
