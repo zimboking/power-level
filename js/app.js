@@ -12,6 +12,7 @@ import { PlanTab } from './ui/plan-tab.js'
 import { StatsTab } from './ui/stats-tab.js'
 import { FoodView } from './ui/food.js'
 import { CapySpaView } from './ui/capyspa.js'
+import { SharedRoutineSheet } from './ui/share-sheet.js'
 import { capyOn } from './water.js'
 import { Fighter } from './ui/hero.js'
 import { RestTimer, startTimer } from './ui/rest.js'
@@ -174,6 +175,7 @@ function App() {
       { label: 'Settings', icon: 'settings', onClick: () => setSettings(true) },
     ]} />
     <${SettingsSheet} open=${settings} onClose=${() => setSettings(false)} app=${app} />
+    <${SharedRoutineSheet} app=${app} />
     ${powerUp && html`<${PowerUp} tier=${powerUp} onDone=${() => setPowerUp(null)} />`}
   </div>`
 }

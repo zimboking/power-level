@@ -7,7 +7,8 @@ import { ExerciseMuscles } from './bodymap.js'
 import { e1rm, nextSetAdvice, platesFor, warmupSets } from '../strength.js'
 import { exInfo, stepFor, usesPlates, barWeight, BAR_TYPES, EQUIPMENT_NAMES, isTimed, isBodyweight, instructionsFor } from '../exercises.js'
 import { POLICIES, effortLabel } from '../progression.js'
-import { policyOf, lastTimeLine, bestEverE1rm } from '../plan.js'
+import { policyOf, lastTimeLine, bestEverE1rm, entriesFor } from '../plan.js'
+import { bestsOf, repsAtLeast, lastNoteFor } from '../records.js'
 import { MUSCLE_NAME } from '../muscles.js'
 import { primeAudio } from './rest.js'
 
@@ -56,6 +57,12 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
   const [info, setInfo] = useState(false)
   const [plateIdx, setPlateIdx] = useState(null)
   const prevBest = bestEverE1rm(workouts, entry.exId)
+  const prev = bestsOf(entriesFor(workouts, entry.exId))
+  // A done set is a record if it beats the estimated 1RM, the heaviest weight or the most reps at that weight.
+  const isRecord = st => !!(prev && st.done && !st.warmup && st.r > 0 && ((st.w || 0) > prev.weight
+    || (prev.e1rm > 0 && st.w > 0 && e1rm(st.w, st.r, st.rir ?? 0) > prev.e1rm) || st.r > repsAtLeast(prev, st.w || 0)))
+  const lastNote = lastNoteFor(workouts, entry.exId)
+  const [noteOpen, setNoteOpen] = useState(false)
   const last = lastTimeLine(workouts, entry.exId, r => effortLabel(r, scale))
   const firstWork = entry.sets.find(s => !s.warmup)
   const policy = entry.cfg.goal ? 'goal' : policyOf(entry.cfg, ex)
@@ -119,6 +126,7 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
       ${ex.uni && html`<span class="tag">Per side</span>`}
     </div>
     ${last && html`<p class="last-time">Last time (${fmtDate(last.date)}): ${last.text}</p>`}
+    ${lastNote && lastNote.text !== entry.note?.trim() && html`<p class="last-note"><${Icon} name="edit" size=${14} /> Note from ${fmtDate(lastNote.date)}: ${lastNote.text}</p>`}
     ${bar > 0 && firstWork?.w > 0 && html`<p class="bar-line"><${Icon} name="dumbbell" size=${15} /> ${BAR_TYPES[ex.eq]} ${bar} kg${perSideW ? ` · ${perSideW} kg per side` : ''}</p>`}
     <p class=${'prog-line k-' + entry.target.kind}><${Icon} name=${entry.target.kind === 'deload' || entry.target.kind === 'down' ? 'down' : entry.target.kind === 'hold' ? 'right' : 'up'} size=${15} />
       <b>${policy === 'goal' ? 'Goal journey' : POLICIES[policy]?.name}</b> · ${entry.target.why}</p>
@@ -129,7 +137,7 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
         const tag = st.warmup ? 'W' : String(++workNo)
         const est = !st.warmup && !timed && st.r > 0 && st.w > 0 ? e1rm(st.w, st.r, st.rir ?? entry.cfg.rir) : null
         return html`<${SetRow} key=${i + '-' + entry.sets.length} set=${st} tag=${tag} ex=${ex} step=${step} scale=${scale} showEffort=${showEffort} timed=${timed} bodyweight=${bw} perSide=${ex.uni}
-          est=${st.done ? est : null} isPr=${st.done && est && prevBest > 0 && est > prevBest} plates=${i === platesIdx || plateIdx === i} platesOpen=${plateIdx === i} onPlates=${() => setPlateIdx(plateIdx === i ? null : i)}
+          est=${st.done ? est : null} isPr=${isRecord(st)} plates=${i === platesIdx || plateIdx === i} platesOpen=${plateIdx === i} onPlates=${() => setPlateIdx(plateIdx === i ? null : i)}
           onPatch=${p => patchSet(i, p)} onToggle=${() => toggleDone(i)} onDelete=${() => removeSet(i)} onCopy=${() => copySet(i)} onMenu=${() => setSetMenuIdx(i)} onEffort=${() => setEffortIdx(i)} />
           ${plateIdx === i && html`<${PlateBar} weight=${st.w} bar=${bar} plates=${settings.plates} label=${BAR_TYPES[ex.eq]} />`}`
       })}
@@ -137,7 +145,10 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
         <button class="text-btn" onClick=${addSet}><${Icon} name="plus" size=${16} /> Add set</button>
         ${bar > 0 && !entry.sets.some(x => x.warmup) && html`<button class="text-btn" onClick=${addWarmups}><${Icon} name="flame" size=${16} /> Warm-ups</button>`}
         <button class="text-btn" onClick=${() => setRestFor('exercise')}><${Icon} name="timer" size=${16} /> ${fmtClock(entry.cfg.rest || settings.rest || 150)}</button>
+        ${!(noteOpen || entry.note) && html`<button class="text-btn" onClick=${() => setNoteOpen(true)}><${Icon} name="edit" size=${16} /> Note</button>`}
       </div>
+      ${(noteOpen || entry.note) && html`<input id=${'note-' + entry.key} class="input ex-note" maxlength="200" placeholder=${lastNote ? 'e.g. ' + lastNote.text : 'Note for this exercise, e.g. seat height 4'}
+        aria-label=${'Note for ' + ex.name} value=${entry.note || ''} onInput=${e => onChange({ ...entry, note: e.target.value })} autoFocus=${noteOpen && !entry.note} />`}
     </div>
     ${entry.advice && html`<p class="advice" role="status">${entry.advice}</p>`}
 

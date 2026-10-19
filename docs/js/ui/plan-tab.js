@@ -8,7 +8,8 @@ import { exInfo, STARTER_PLANS, EXERCISES } from '../exercises.js'
 import { POLICIES } from '../progression.js'
 import { DAY_NAMES, emptyPlan, plannedFor, applyStarter, addDays, weekOf, moveSession } from '../schedule.js'
 import { MUSCLE_NAME } from '../muscles.js'
-import { uid, today } from '../store.js'
+import { uid, today, isStandalone } from '../store.js'
+import { shareRoutine } from './share-sheet.js'
 import { groupRoutines, addFolder, renameFolder, deleteFolder, moveFolder, moveRoutine, setRoutineFolder, saveRoutine, deleteRoutine } from '../routines.js'
 
 const REST_OPTS = [30, 45, 60, 75, 90, 120, 150, 180, 210, 240, 300, 360, 480, 600, 900]
@@ -110,10 +111,11 @@ export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', o
   const [r, setR] = useState(routine)
   const [pick, setPick] = useState(false)
   const [newFolder, setNewFolder] = useState('')
+  const [shareText, setShareText] = useState('')
   // Start from the saved routine every time the editor opens, so unsaved changes don't linger.
   const openedFor = useRef(null)
   if (!open) openedFor.current = null
-  else if (routine && openedFor.current !== routine) { openedFor.current = routine; if (r !== routine) setR(routine); if (newFolder) setNewFolder('') }
+  else if (routine && openedFor.current !== routine) { openedFor.current = routine; if (r !== routine) setR(routine); if (newFolder) setNewFolder(''); if (shareText) setShareText('') }
   if (!open || !r) return null
   const items = r.items
   const setItems = list => setR({ ...r, items: list })
@@ -158,6 +160,8 @@ export function RoutineEditor({ app, routine, open, onClose, mode = 'routine', o
       <div class="group"><${Toggle} id="custom-keep" checked=${keep} onChange=${setKeep} label="Also save as a routine" hint="So you can pick it again or put it in your weekly plan." /></div>
       <button class="btn primary big" disabled=${!items.length} onClick=${start}>Start workout</button>`
       : html`<button class="btn primary big" disabled=${!r.name.trim() || !items.length} onClick=${save}>Save routine</button>`}
+    ${!isNew && !custom && isStandalone() && html`<button class="btn" disabled=${!items.length} onClick=${async () => { const res = await shareRoutine(app, r); setShareText(res.url || '') }}><${Icon} name="link" size=${18} /> Share as a link</button>
+      ${shareText && html`<input id="routine-share-url" class="input" readonly value=${shareText} aria-label="Link to this routine" onFocus=${e => e.target.select()} /><p class="muted small">Copy this link and send it to your mates.</p>`}`}
     ${!isNew && !custom && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to delete" onConfirm=${() => {
       app.update(s => ({ ...s, profile: deleteRoutine(s.profile, r.id) }), ['profile']); onClose()
     }}>Delete routine</${ConfirmButton}>`}

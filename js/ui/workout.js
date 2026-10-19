@@ -5,8 +5,9 @@ import { ExerciseCard } from './exercise-card.js'
 import { LibrarySheet } from './library.js'
 import { RoutineEditor } from './plan-tab.js'
 import { groupRoutines, saveRoutine as storeRoutine } from '../routines.js'
-import { buildEntry, bestEverE1rm, DEFAULT_CFG } from '../plan.js'
-import { FEELINGS, workoutVolume, bestE1rm } from '../strength.js'
+import { buildEntry, DEFAULT_CFG, entriesFor } from '../plan.js'
+import { recordsBroken } from '../records.js'
+import { FEELINGS, workoutVolume } from '../strength.js'
 import { liftedComparison, formatKg } from '../power.js'
 import { exInfo } from '../exercises.js'
 import { plannedFor, nextSession } from '../schedule.js'
@@ -41,13 +42,13 @@ export function newSession(app, routine, { feeling = 'great', note = '', warm = 
 export function sessionFromWorkout(w) {
   return {
     ...w, editing: true, focus: 0,
-    entries: w.entries.map(e => ({ key: Math.random().toString(36).slice(2, 9), exId: e.exId, group: e.group || null, cfg: { ...DEFAULT_CFG, ...(e.cfg || {}) }, target: e.target || { kind: 'hold', why: 'As logged.' }, sets: e.sets.map(s => ({ ...s, done: true, auto: false })), advice: null })),
+    entries: w.entries.map(e => ({ key: Math.random().toString(36).slice(2, 9), exId: e.exId, group: e.group || null, ...(e.note ? { note: e.note } : {}), cfg: { ...DEFAULT_CFG, ...(e.cfg || {}) }, target: e.target || { kind: 'hold', why: 'As logged.' }, sets: e.sets.map(s => ({ ...s, done: true, auto: false })), advice: null })),
   }
 }
 
 export function toWorkout(session) {
   const entries = session.entries
-    .map(e => ({ exId: e.exId, group: e.group, cfg: e.cfg, target: { w: e.target.w, r: e.target.r, sec: e.target.sec, sets: e.target.sets, kind: e.target.kind }, sets: e.sets.filter(s => s.done).map(({ auto, ...s }) => s) }))
+    .map(e => ({ exId: e.exId, group: e.group, ...(e.note?.trim() ? { note: e.note.trim() } : {}), cfg: e.cfg, target: { w: e.target.w, r: e.target.r, sec: e.target.sec, sets: e.target.sets, kind: e.target.kind }, sets: e.sets.filter(s => s.done).map(({ auto, ...s }) => s) }))
     .filter(e => e.sets.length)
   const durationMin = session.editing ? session.durationMin || 0 : Math.round((Date.now() - session.startedAt) / 60000)
   return { id: session.id, date: session.date, name: session.name, routineId: session.routineId || null, feeling: session.feeling, note: session.note || '', durationMin, entries }
@@ -79,6 +80,14 @@ export function StartSheet({ open, onClose, app, routine, onStart, onCustom }) {
   </${Sheet}>`
 }
 
+const RECORD_TEXT = {
+  e1rm: r => `≈ ${fmt(r.value)} kg 1RM (was ${fmt(r.prev)})`,
+  weight: r => `Heaviest: ${fmt(r.value)} kg (was ${fmt(r.prev)})`,
+  reps: r => `${r.value} reps${r.w > 0 ? ` at ${fmt(r.w)} kg` : ''} (was ${r.prev})`,
+  volume: r => `Volume: ${formatKg(r.value)} (was ${formatKg(r.prev)})`,
+  time: r => `Longest hold: ${fmtClock(r.value)} (was ${fmtClock(r.prev)})`,
+}
+
 function Summary({ result, onDone }) {
   const cmp = liftedComparison(result.volume)
   return html`<div class="stack summary">
@@ -86,7 +95,8 @@ function Summary({ result, onDone }) {
       <p class="big-num">${formatKg(result.volume)}</p>
       <p>${cmp.best ? html`That's <b>${cmp.times >= 10 ? Math.round(cmp.times) : cmp.times.toFixed(1)} × ${cmp.best.name.replace(/^an? /, '')}</b>.` : 'Every kilo counts.'}</p>
       <p class="muted small">${result.sets} sets · ${result.minutes} min · power level ${result.before.toLocaleString()} → <b>${result.after.toLocaleString()}</b></p></div>
-    ${result.prs.length > 0 && html`<div class="card"><p class="section-label">New records</p>${result.prs.map(p => html`<p class="pr-line"><span class="pr">PR</span> ${p.name}: ≈ ${fmt(p.e1rm)} kg 1RM <span class="muted">(was ${fmt(p.prev)})</span></p>`)}</div>`}
+    ${result.prs.length > 0 && html`<div class="card"><p class="section-label">New records</p>${result.prs.map(p => html`<div class="pr-group"><p class="pr-line"><span class="pr">PR</span> <b>${p.name}</b></p>
+      <ul class="pr-list">${p.records.map(r => html`<li>${RECORD_TEXT[r.kind](r)}</li>`)}</ul></div>`)}</div>`}
     ${result.next && html`<p class="muted center">Next up: <b>${result.next.routine.name}</b> on ${fmtWeekday(result.next.date)}.</p>`}
     <button class="btn primary big" onClick=${onDone}>Done</button>
   </div>`
@@ -219,7 +229,7 @@ export function WorkoutTab({ app }) {
       app.stopRest()
       if (!w.entries.length) { app.update(s => ({ ...s, active: null }), ['profile']); app.toast('Nothing logged, so nothing saved'); return }
       const before = app.power.level
-      const prs = w.entries.map(e => ({ name: exInfo(e.exId).name, e1rm: bestE1rm(e), prev: bestEverE1rm(workouts, e.exId) })).filter(p => p.e1rm && p.prev > 0 && p.e1rm > p.prev)
+      const prs = w.entries.map(e => ({ name: exInfo(e.exId).name, records: recordsBroken(e, entriesFor(workouts, e.exId)) })).filter(p => p.records.length)
       const all = [...workouts, w]
       app.update(s => ({ ...s, active: null, workouts: [...s.workouts, w] }), ['profile', 'w:' + w.id])
       setResult({ volume: workoutVolume(w), sets: w.entries.reduce((n, e) => n + e.sets.filter(x => !x.warmup).length, 0), minutes: w.durationMin, prs, before, after: app.powerAfter(all), next: nextSession(profile, all, w.date) })
