@@ -39,6 +39,8 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/records.js` | Records per exercise (1RM, heaviest, reps at a weight, volume, hold) and exercise notes |
 | `js/duration.js` | Timed exercises: stored in seconds, shown in s / min / h per exercise (`timeUnit`, `settings.timeUnits`) |
 | `js/reorder.js`, `js/ui/drag.js` | Drag-to-reorder (grip handle, pointer events) next to the arrow buttons |
+| `js/workout-share.js`, `js/ui/share-card.js` | Share a finished workout: text summary + 1080×1350 picture card (canvas) |
+| `js/ui/lifted-art.js` | Flat SVG drawings for each `LIFTED_LADDER` item (fixed colours, so they draw on a canvas) |
 | `js/share.js` | Routine share links (`#routine=…`, base64url JSON); decoding checks every field |
 | `js/muscles.js`, `js/stats.js` | Muscle-map maths, heatmap, streaks, strength balance |
 | `js/nutrition.js` | Quick-pick foods (estimates, `src: 'est'`), Mifflin-St Jeor targets, kcal/kJ |
@@ -48,7 +50,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/store.js` | Persistence (Claude artifact db or localStorage), backups |
 | `js/water.js` | CapySpa water tracker: drink logs per day, hydration ratios, stages, streak, mood insight |
 | `js/data/catalog.json`, `body.json` | Generated; see `tools/build-data.mjs` and NOTICE.md |
-| `js/data/foods.json` | Generated from FSANZ AFCD Release 3; see `tools/build-foods.mjs` |
+| `js/data/foods.json` | Generated from FSANZ AFCD Release 3: `[key, name, kcal, p, c, f, fibre g, sodium mg]` |
 | `js/ui/*.js` | Views: home, plan-tab, workout, exercise-card, set-row, stats-tab, food, library… |
 | `js/ui/capyspa.js`, `capy-stats.js`, `onsen.js` | CapySpa tab (Spa / Log / Stats), its Home card, the onsen SVG |
 | `tools/xlsx.mjs` | Tiny dependency-free .xlsx reader for build scripts |
@@ -59,7 +61,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```
@@ -99,6 +101,10 @@ Data files (only when the sources change):
   `power-level-photos`); restoring merges by id and never deletes.
 - **Deleted custom exercises** stay in `profile.exercises` with `hidden: true`, so logged workouts
   keep their name and history; the library and routines drop them.
+- **Fibre (`fib`, g) and sodium (`na`, mg)** are optional on every food; missing means unknown, not
+  zero, and `sumEntries` counts how many foods lack them. Guides are NHMRC values (`nutrition.js`).
+- **Cardio distance** is `dist` in metres on timed sets, for exercises with `distance: true`
+  (catalogue cardio, or custom). **Reformer** exercises are no-load (`isBodyweight`); springs go in the note.
 - **Share links are untrusted input.** Everything in `#routine=` goes through `decodeRoutine`,
   which clamps numbers, whitelists equipment/progressions and drops unknown exercises.
 - **Food values in `js/nutrition.js` are approximate.** They were written from general knowledge,

@@ -5,7 +5,7 @@
 export const SHARE_KEY = 'routine'
 const MAX_ITEMS = 40
 const ID_RE = /^[a-z0-9:_.-]{1,80}$/i
-const EQUIPMENT = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'ez', 'trap', 'smith', 'kettlebell', 'band', 'other']
+const EQUIPMENT = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'reformer', 'ez', 'trap', 'smith', 'kettlebell', 'band', 'other']
 const PROGS = ['double', 'linear', 'greyskull', 'triple', 'time', 'off']
 
 function toBase64Url(text) {
@@ -19,7 +19,7 @@ function fromBase64Url(s) {
 }
 
 const ITEM_KEYS = ['exId', 'sets', 'repsMin', 'repsMax', 'rir', 'rest', 'prog', 'group', 'pyramid']
-const EX_KEYS = ['id', 'name', 'eq', 'p', 's', 'fdb', 'img', 'mode', 'uni', 'custom', 'timeUnit']
+const EX_KEYS = ['id', 'name', 'eq', 'p', 's', 'fdb', 'img', 'mode', 'uni', 'custom', 'timeUnit', 'distance', 'distUnit']
 
 /**
  * routine: { name, items }. lookup(exId) gives the stored details of a catalogue or custom
@@ -64,6 +64,7 @@ function cleanExercise(e, wanted) {
     ...(typeof e.fdb === 'string' && /^[A-Za-z0-9_()'.,+-]{1,100}$/.test(e.fdb) ? { fdb: e.fdb, img: num(e.img, 1, 4, 2) } : {}),
     mode: e.mode === 'time' ? 'time' : 'reps', uni: e.uni === true, cues: [], custom: e.custom === true,
     ...(e.mode === 'time' && ['s', 'min', 'h'].includes(e.timeUnit) ? { timeUnit: e.timeUnit } : {}),
+    ...(e.mode === 'time' && e.distance === true ? { distance: true, distUnit: e.distUnit === 'm' ? 'm' : 'km' } : {}),
   }
 }
 

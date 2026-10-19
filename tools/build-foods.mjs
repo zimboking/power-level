@@ -4,7 +4,8 @@
 //
 //   node tools/build-foods.mjs "<AFCD Release 3 - Nutrient profiles.xlsx>"
 //
-// Output: [[publicFoodKey, name, kcal, protein, carbs, fat], ...], all per 100 g edible portion.
+// Output: [[publicFoodKey, name, kcal, protein, carbs, fat, fibre, sodium], ...], per 100 g edible
+// portion; fibre is "Total dietary fibre" in g, sodium "Sodium (Na)" in mg.
 // Energy is FSANZ's "Energy with dietary fibre, equated" (the figure on Australian labels),
 // converted from kJ to kcal. Carbs are "Available carbohydrate, with sugar alcohols".
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -21,6 +22,8 @@ const COLUMNS = {
   p: /^protein \(g\)$/,
   f: /^fat, total \(g\)$/,
   c: /^available carbohydrate, with sugar alcohols \(g\)$/,
+  fib: /^total dietary fibre \(g\)$/,
+  na: /^sodium \(na\) \(mg\)$/,
 }
 
 const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim()
@@ -43,10 +46,10 @@ export function convertRows(rows) {
   for (const r of rows.slice(at + 1)) {
     const id = clean(r[col.id]), name = clean(r[col.name])
     if (!id || !name) continue
-    const vals = [num(r[col.kj]), num(r[col.p]), num(r[col.c]), num(r[col.f])]
+    const vals = [num(r[col.kj]), num(r[col.p]), num(r[col.c]), num(r[col.f]), num(r[col.fib]), num(r[col.na])]
     if (vals.some(v => !Number.isFinite(v))) throw new Error(`Bad number for ${id} ${name}`)
-    const [kj, p, c, f] = vals
-    out.push([id, name, kjToKcal(kj), r1(p), r1(c), r1(f)])
+    const [kj, p, c, f, fib, na] = vals
+    out.push([id, name, kjToKcal(kj), r1(p), r1(c), r1(f), r1(fib), Math.round(na)])
   }
   return out
 }

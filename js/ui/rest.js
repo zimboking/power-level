@@ -20,16 +20,36 @@ let audio = null
 export function primeAudio() {
   try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume() } catch { audio = null }
 }
-function beep(freq, ms) {
+// A limiter on the way out lets the chime run hot without crackling.
+let out = null
+const output = () => {
+  if (out) return out
+  const c = audio.createDynamicsCompressor()
+  c.threshold.value = -6; c.knee.value = 0; c.ratio.value = 20; c.attack.value = 0.001; c.release.value = 0.1
+  c.connect(audio.destination)
+  out = c
+  return out
+}
+// Loud: a square wave plus a sine an octave up, at full level. Square waves carry over gym noise
+// far better than a plain sine; phones still cap it at their own volume.
+function beep(freq, ms, loud = false, at = 0) {
   if (!audio) return
   try {
-    const o = audio.createOscillator(), g = audio.createGain()
-    o.frequency.value = freq; o.type = 'sine'
-    g.gain.setValueAtTime(0.0001, audio.currentTime)
-    g.gain.exponentialRampToValueAtTime(0.35, audio.currentTime + 0.01)
-    g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000)
-    o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + ms / 1000 + 0.02)
+    const t0 = audio.currentTime + at, t1 = t0 + ms / 1000
+    const g = audio.createGain()
+    g.gain.setValueAtTime(0.0001, t0)
+    g.gain.exponentialRampToValueAtTime(loud ? 1 : 0.35, t0 + 0.008)
+    g.gain.setValueAtTime(loud ? 1 : 0.35, t1 - 0.04)
+    g.gain.exponentialRampToValueAtTime(0.0001, t1)
+    g.connect(loud ? output() : audio.destination)
+    const tones = loud ? [['square', freq], ['sine', freq * 2]] : [['sine', freq]]
+    for (const [type, f] of tones) { const o = audio.createOscillator(); o.type = type; o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t1 + 0.02) }
   } catch { /* audio unavailable */ }
+}
+/** The rest-over alert: three rising chimes, twice when loud. */
+export function restChime(loud) {
+  const notes = loud ? [880, 1175, 1568, 880, 1175, 1568] : [990, 990]
+  notes.forEach((f, i) => beep(f, loud ? 180 : i ? 320 : 220, loud, i * (loud ? 0.22 : 0.28) + (loud && i >= 3 ? 0.25 : 0)))
 }
 
 function Dial({ left, total, size }) {
@@ -42,7 +62,7 @@ function Dial({ left, total, size }) {
   </svg>`
 }
 
-export function RestTimer({ timer, setTimer, sound, flash, onToggleSound }) {
+export function RestTimer({ timer, setTimer, sound, loud = true, flash, onToggleSound }) {
   const [now, setNow] = useState(Date.now())
   const [big, setBig] = useState(false)
   const lastBeep = useRef(null)
@@ -55,10 +75,11 @@ export function RestTimer({ timer, setTimer, sound, flash, onToggleSound }) {
   useEffect(() => {
     if (paused || lastBeep.current === left) return
     lastBeep.current = left
-    if (sound && left > 0 && left <= 3) beep(660, 120)
+    if (sound && left > 0 && left <= 3) beep(660, 120, loud)
     if (left === 0) {
-      if (sound) { beep(990, 220); setTimeout(() => beep(990, 320), 280) }
-      try { navigator.vibrate?.([250, 120, 250]) } catch { /* no vibration */ }
+      if (sound) restChime(loud)
+      // Android buzzes (iPhones ignore this): long pulses you'll feel through a pocket.
+      try { navigator.vibrate?.(loud ? [500, 150, 500, 150, 700] : [250, 120, 250]) } catch { /* no vibration */ }
       if (flash) { setFlashing(true); setTimeout(() => setFlashing(false), 2600) }
     }
   }, [left, paused])

@@ -12,16 +12,16 @@ const AFCD = JSON.parse(readFileSync(new URL('../js/data/foods.json', import.met
 const top = (q, lists = [[], AFCD, ESTIMATES], n = 1) => rankFoods(q, lists, n).map(f => f.name)
 
 // ---- Conversion ----
-const HEADER = ['Public Food Key', 'Classification', 'Derivation', 'Food Name', 'Energy with dietary fibre, equated \r\n(kJ)', 'Energy, without dietary fibre, equated \r\n(kJ)', 'Protein \r\n(g)', 'Fat, total \r\n(g)', 'Available carbohydrate, with sugar alcohols \r\n(g)']
+const HEADER = ['Public Food Key', 'Classification', 'Derivation', 'Food Name', 'Energy with dietary fibre, equated \r\n(kJ)', 'Energy, without dietary fibre, equated \r\n(kJ)', 'Protein \r\n(g)', 'Fat, total \r\n(g)', 'Available carbohydrate, with sugar alcohols \r\n(g)', 'Total dietary fibre \r\n(g)', 'Sodium (Na) \r\n(mg)']
 
 test('converts AFCD rows: kJ to kcal, rounding, header found below title rows', () => {
   const rows = [['Release 3 - Nutrient profiles (per 100 g)'], [], HEADER,
-    ['F002593', '1', 'Analysed', 'Chicken, breast, lean flesh, grilled, no added fat', '598', '598', '29.81', '2.54', '0'],
-    ['F000001', '1', 'x', 'Water, tap', '0', '0', '', '', ''],
-    ['', '', '', '', '', '', '', '', '']]
+    ['F002593', '1', 'Analysed', 'Chicken, breast, lean flesh, grilled, no added fat', '598', '598', '29.81', '2.54', '0', '0', '62.4'],
+    ['F000001', '1', 'x', 'Water, tap', '0', '0', '', '', '', '', '3'],
+    ['', '', '', '', '', '', '', '', '', '', '']]
   assert.deepEqual(convertRows(rows), [
-    ['F002593', 'Chicken, breast, lean flesh, grilled, no added fat', 143, 29.8, 0, 2.5],
-    ['F000001', 'Water, tap', 0, 0, 0, 0],
+    ['F002593', 'Chicken, breast, lean flesh, grilled, no added fat', 143, 29.8, 0, 2.5, 0, 62],
+    ['F000001', 'Water, tap', 0, 0, 0, 0, 0, 3],
   ])
 })
 
@@ -32,7 +32,7 @@ test('kJ to kcal uses 4.184', () => {
 
 test('conversion fails loudly on a missing column or bad number', () => {
   assert.throws(() => convertRows([HEADER.slice(0, 5), ['F1', '', '', 'x', '1']]), /Missing column/)
-  assert.throws(() => convertRows([HEADER, ['F1', '', '', 'x', 'abc', '', '1', '1', '1']]), /Bad number/)
+  assert.throws(() => convertRows([HEADER, ['F1', '', '', 'x', 'abc', '', '1', '1', '1', '1', '1']]), /Bad number/)
 })
 
 // A tiny hand-built .xlsx: one deflated sheet with a shared and an inline string.
@@ -180,4 +180,28 @@ test('name search uses the classic endpoint and keeps only complete products', a
   // Cached: no further calls for the same term.
   await searchProducts('Tim Tams ', opts(() => { throw new Error('should be cached') }))
   assert.deepEqual(await searchProducts('ab', opts(() => { throw new Error('too short') })), [])
+})
+
+test('fibre and sodium: AFCD rows carry them, totals count only foods that list them', async () => {
+  const { sumEntries, macrosFor, extraTargets } = await import('../js/nutrition.js')
+  const oats = AFCD.find(f => f.name === 'Oats, rolled, uncooked')
+  assert.ok(oats.fib > 5 && oats.na >= 0)
+  const m = macrosFor(oats, 50)
+  assert.equal(m.fib, Math.round(oats.fib * 5) / 10)
+  const t = sumEntries([m, { kcal: 100, p: 1, c: 1, f: 1 }])
+  assert.equal(t.fib, m.fib)
+  assert.equal(t.unknown, 1)
+  assert.deepEqual(extraTargets({ sex: 'female' }), { fib: 25, na: 2000 })
+  assert.deepEqual(extraTargets({ sex: 'male' }), { fib: 30, na: 2000 })
+})
+
+test('Open Food Facts fibre and sodium: sodium in g becomes mg, salt is used when sodium is missing', async () => {
+  const { productToFood } = await import('../js/off.js')
+  const base = { code: '9300000000000', product_name: 'Muesli', nutriments: { 'energy-kcal_100g': 400, proteins_100g: 10, carbohydrates_100g: 60, fat_100g: 10 } }
+  const a = productToFood({ ...base, nutriments: { ...base.nutriments, fiber_100g: 8.24, sodium_100g: 0.12 } })
+  assert.deepEqual([a.fib, a.na], [8.2, 120])
+  const b = productToFood({ ...base, nutriments: { ...base.nutriments, salt_100g: 1 } })
+  assert.equal(b.na, 400)
+  const c = productToFood(base)
+  assert.equal('fib' in c || 'na' in c, false)
 })

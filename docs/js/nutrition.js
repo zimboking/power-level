@@ -28,7 +28,7 @@ export function targets(profile) {
   const protein = Math.round(profile.weight * (profile.goal === 'cut' ? 2.2 : 2))
   const fat = Math.round(profile.weight * 0.8)
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4))
-  return { kcal, protein, carbs, fat, tdee: Math.round(tdee) }
+  return { kcal, protein, carbs, fat, tdee: Math.round(tdee), ...extraTargets(profile) }
 }
 
 // Quick picks. [name, kcal, protein, carbs, fat] per 100 g, plus an optional common serving.
@@ -90,16 +90,27 @@ export const FOODS = RAW.map(([name, kcal, p, c, f, unit, g], i) => ({
 }))
 
 // Macros for an amount of a food, in grams.
+// Fibre and sodium reference values from the NHMRC Nutrient Reference Values for Australia and
+// New Zealand: fibre Adequate Intake 30 g (men) / 25 g (women); sodium Suggested Dietary Target
+// 2000 mg. Shown as guides, not limits.
+export const FIBRE_AI = { male: 30, female: 25 }
+export const SODIUM_SDT = 2000
+export const extraTargets = profile => ({ fib: FIBRE_AI[profile?.sex] || FIBRE_AI.male, na: SODIUM_SDT })
+
 export function macrosFor(food, grams) {
   const k = (Number(grams) || 0) / 100
   const r = v => Math.round(v * k * 10) / 10
-  return { kcal: Math.round(food.kcal * k), p: r(food.p), c: r(food.c), f: r(food.f) }
+  return { kcal: Math.round(food.kcal * k), p: r(food.p), c: r(food.c), f: r(food.f),
+    ...(food.fib != null ? { fib: r(food.fib) } : {}), ...(food.na != null ? { na: Math.round(food.na * k) } : {}) }
 }
 
+/** Totals; fibre and sodium only count foods that list them, and `unknown` counts the rest. */
 export function sumEntries(entries) {
   return (entries || []).reduce((t, e) => ({
     kcal: t.kcal + (e.kcal || 0), p: t.p + (e.p || 0), c: t.c + (e.c || 0), f: t.f + (e.f || 0),
-  }), { kcal: 0, p: 0, c: 0, f: 0 })
+    fib: t.fib + (e.fib || 0), na: t.na + (e.na || 0),
+    unknown: t.unknown + (e.fib == null || e.na == null ? 1 : 0),
+  }), { kcal: 0, p: 0, c: 0, f: 0, fib: 0, na: 0, unknown: 0 })
 }
 
 // Energy units. Everything is stored in kcal; kJ is display and entry only (1 kcal = 4.184 kJ).

@@ -1,6 +1,6 @@
 // The exercise library: ~780 exercises with photos and muscles, searchable and filterable by
 // muscle (tap the body map) and equipment. Doubles as the picker inside a workout.
-import { html, useState, useEffect, useMemo, Sheet, Icon, Field, Segmented, Toggle, ConfirmButton, fmt, fmtDate } from './core.js'
+import { html, useState, useEffect, useMemo, Sheet, Icon, Field, Segmented, Chips, Toggle, ConfirmButton, fmt, fmtDate } from './core.js'
 import { Thumb, ExerciseDemo } from './media.js'
 import { BodyMap, ExerciseMuscles } from './bodymap.js'
 import { LineChart } from './charts.js'
@@ -8,12 +8,12 @@ import { EXERCISES, loadCatalog, instructionsFor, EQUIPMENT_NAMES } from '../exe
 import { MUSCLE_NAME, MAIN_MUSCLES } from '../muscles.js'
 import { exerciseHistory } from '../strength.js'
 import { uid } from '../store.js'
-import { TIME_UNITS } from '../duration.js'
+import { TIME_UNITS, DIST_UNITS } from '../duration.js'
 import { deleteCustomExercise, routinesUsing } from '../routines.js'
 
 const EQ_FILTERS = [
   { value: 'all', label: 'All' }, { value: 'barbell', label: 'Barbell' }, { value: 'dumbbell', label: 'Dumbbell' },
-  { value: 'machine', label: 'Machine & cable' }, { value: 'bodyweight', label: 'Bodyweight' },
+  { value: 'machine', label: 'Machine & cable' }, { value: 'bodyweight', label: 'Bodyweight' }, { value: 'reformer', label: 'Reformer' },
 ]
 const eqMatch = (eq, f) => f === 'all' || (f === 'machine' ? eq === 'machine' || eq === 'cable' : f === 'barbell' ? ['barbell', 'ez', 'trap', 'smith'].includes(eq) : eq === f)
 
@@ -32,15 +32,17 @@ export function useLibrary(app) {
 const EX_IDS = new Set(EXERCISES.map(e => e.id))
 
 function NewExercise({ open, onClose, onSave }) {
-  const [f, setF] = useState({ name: '', eq: 'machine', p: 'chest', mode: 'reps', uni: false, timeUnit: 's' })
-  const save = e => { e.preventDefault(); if (!f.name.trim()) return; onSave({ id: 'c:' + uid(), name: f.name.trim(), eq: f.eq, p: [f.p], s: [], mode: f.mode, uni: f.uni, cues: [], custom: true, ...(f.mode === 'time' ? { timeUnit: f.timeUnit } : {}) }); setF({ ...f, name: '' }) }
+  const [f, setF] = useState({ name: '', eq: 'machine', p: 'chest', mode: 'reps', uni: false, timeUnit: 's', distance: false, distUnit: 'km' })
+  const save = e => { e.preventDefault(); if (!f.name.trim()) return; onSave({ id: 'c:' + uid(), name: f.name.trim(), eq: f.eq, p: [f.p], s: [], mode: f.mode, uni: f.uni, cues: [], custom: true, ...(f.mode === 'time' ? { timeUnit: f.timeUnit, ...(f.distance ? { distance: true, distUnit: f.distUnit } : {}) } : {}) }); setF({ ...f, name: '' }) }
   return html`<${Sheet} open=${open} title="New exercise" onClose=${onClose}>
     <form class="stack" onSubmit=${save}>
       <${Field} label="Name"><input id="nx-name" class="input" value=${f.name} onInput=${e => setF({ ...f, name: e.target.value })} placeholder="e.g. Hammer Strength chest press" /></${Field}>
       <${Field} label="Equipment"><select id="nx-eq" class="input" value=${f.eq} onChange=${e => setF({ ...f, eq: e.target.value })}>${Object.entries(EQUIPMENT_NAMES).map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></${Field}>
       <${Field} label="Main muscle"><select id="nx-p" class="input" value=${f.p} onChange=${e => setF({ ...f, p: e.target.value })}>${MAIN_MUSCLES.map(m => html`<option value=${m}>${MUSCLE_NAME[m]}</option>`)}</select></${Field}>
       <${Field} label="Logged by"><${Segmented} small label="Logged by" value=${f.mode} onChange=${v => setF({ ...f, mode: v })} options=${[{ value: 'reps', label: 'Weight × reps' }, { value: 'time', label: 'Time' }]} /></${Field}>
-      ${f.mode === 'time' && html`<${Field} label="Time in" hint="Seconds for holds like a plank; minutes or hours for runs, rides and rows."><${Segmented} small label="Time in" value=${f.timeUnit} onChange=${v => setF({ ...f, timeUnit: v })} options=${Object.entries(TIME_UNITS).map(([value, u]) => ({ value, label: u.label }))} /></${Field}>`}
+      ${f.mode === 'time' && html`<${Field} label="Time in" hint="Seconds for holds like a plank; minutes or hours for runs, rides and rows."><${Segmented} small label="Time in" value=${f.timeUnit} onChange=${v => setF({ ...f, timeUnit: v })} options=${Object.entries(TIME_UNITS).map(([value, u]) => ({ value, label: u.label }))} /></${Field}>
+      <div class="group"><${Toggle} id="nx-dist" checked=${f.distance} onChange=${v => setF({ ...f, distance: v })} label="Also log distance" hint="For runs, rides, rows and swims." /></div>
+      ${f.distance && html`<${Field} label="Distance in"><${Segmented} small label="Distance in" value=${f.distUnit} onChange=${v => setF({ ...f, distUnit: v })} options=${Object.entries(DIST_UNITS).map(([value, u]) => ({ value, label: u.label }))} /></${Field}>`}`}
       <div class="group"><${Toggle} id="nx-uni" checked=${f.uni} onChange=${v => setF({ ...f, uni: v })} label="One side at a time" hint="Reps are logged per side, volume counts both." /></div>
       <button class="btn primary">Add exercise</button>
     </form>
@@ -91,7 +93,7 @@ export function Library({ app, onPick, pickLabel }) {
   }
   return html`<div class="stack">
     <div class="search"><${Icon} name="list" size=${18} /><input id="lib-q" type="search" placeholder=${`Search ${list.length} exercises`} value=${q} onInput=${e => { setQ(e.target.value); setLimit(60) }} /></div>
-    <${Segmented} small label="Equipment" value=${eq} onChange=${setEq} options=${EQ_FILTERS} />
+    <${Chips} small label="Equipment" value=${eq} onChange=${setEq} options=${EQ_FILTERS} />
     <div class="filter-row">
       <button class=${'chip' + (showMap ? ' on' : '')} onClick=${() => setShowMap(!showMap)}>${muscle ? MUSCLE_NAME[muscle] : 'By muscle'}</button>
       ${muscle && html`<button class="chip" onClick=${() => setMuscle(null)}>Clear</button>`}

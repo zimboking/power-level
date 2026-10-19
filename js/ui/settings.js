@@ -6,6 +6,7 @@ import { emptyPlan } from '../schedule.js'
 import { today, isStandalone, makeBackup, parseBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 import { capyOn } from '../water.js'
+import { primeAudio, restChime } from './rest.js'
 import { POLICIES } from '../progression.js'
 import { DEFAULT_PROGS, defaultProgOf } from '../plan.js'
 import { listPhotos, putPhotos, makePhotoBackup, parsePhotoBackup, newPhotos } from '../photos.js'
@@ -81,6 +82,9 @@ export function SettingsSheet({ open, onClose, app }) {
       <button class="toggle-row" onClick=${() => setRestWheel(true)}><span class="row-main"><span>Default rest</span><small>Each exercise and set can have its own.</small></span><b>${fmtClock(s.rest || 150)}</b></button>
       <${Toggle} id="set-flash" checked=${!!s.restFlash} onChange=${v => set({ restFlash: v })} label="Flash the screen when rest ends" hint="For loud gyms where you won't hear the beep." />
       <${Toggle} id="set-beep" checked=${s.restSound !== false} onChange=${v => set({ restSound: v })} label="Beep when rest ends" />
+      ${s.restSound !== false && html`<div class="toggle-row"><span class="row-main"><span>Chime</span><small>Loud cuts through a busy gym and buzzes harder. Turn your phone's volume up too.</small></span>
+        <${Segmented} small label="Chime" value=${s.restLoud === false ? 'soft' : 'loud'} onChange=${v => set({ restLoud: v === 'loud' })} options=${[{ value: 'loud', label: 'Loud' }, { value: 'soft', label: 'Soft' }]} /></div>
+        <button class="row-btn" onClick=${() => { primeAudio(); restChime(s.restLoud !== false) }}><span class="row-main"><span>Test the chime</span></span></button>`}
       <div class="toggle-row"><span class="row-main"><span>Week starts on</span></span><${Segmented} small label="Week starts on" value=${plan.weekStart} onChange=${v => app.update(st => ({ ...st, profile: { ...st.profile, plan: { ...plan, weekStart: v } } }), ['profile'])} options=${[{ value: 1, label: 'Monday' }, { value: 0, label: 'Sunday' }]} /></div>
     </div>
     <p class="section-label">Extras</p>
@@ -109,7 +113,7 @@ export function SettingsSheet({ open, onClose, app }) {
       ${app.state.profile.example && html`<${ConfirmButton} class="btn ghost" confirmText="Tap again to clear everything" onConfirm=${() => app.replaceAll({ profile: { ...app.state.profile, example: false, weighins: [], goals: [], templates: [], plan: emptyPlan() }, workouts: [], food: {} })}>Clear example data</${ConfirmButton}>`}
     </div>
     <p class="muted small center">Exercise photos: free-exercise-db (public domain). Body diagram: MuscleMap (MIT).</p>
-    <p class="muted small center">Food data: Australian Food Composition Database, Release 3, by Food Standards Australia New Zealand (CC BY 4.0); FSANZ does not endorse this app. Packaged products: Open Food Facts contributors (ODbL). Quick picks are rough estimates, not from a cited table.</p>
+    <p class="muted small center">Food data: Australian Food Composition Database, Release 3, by Food Standards Australia New Zealand (CC BY 4.0); FSANZ does not endorse this app. Packaged products: Open Food Facts contributors (ODbL). Quick picks are rough estimates, not from a cited table. Fibre and sodium guides: NHMRC Nutrient Reference Values for Australia and New Zealand.</p>
     <p class="muted small center">CapySpa: from Water-habit-app-2 by zimboking (Apache 2.0). Drink ratios follow the Beverage Hydration Index (Maughan et al., 2016).</p>
     <${Sheet} open=${restWheel} title="Default rest" onClose=${() => setRestWheel(false)}>
       <${WheelPicker} value=${s.rest || 150} onChange=${v => set({ rest: v })} />

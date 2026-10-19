@@ -33,20 +33,20 @@ export function tierFor(level) {
 
 // Real-ish masses in kg. The last one is a joke goal: a volcano is about 10^14 kg of rock.
 export const LIFTED_LADDER = [
-  { kg: 90, name: 'a fridge' },
-  { kg: 450, name: 'a grand piano' },
-  { kg: 900, name: 'a dairy cow' },
-  { kg: 1500, name: 'a family car' },
-  { kg: 6000, name: 'an African elephant' },
-  { kg: 8000, name: 'a T. rex' },
-  { kg: 12000, name: 'a school bus' },
-  { kg: 60000, name: 'a Leopard 2 tank' },
-  { kg: 150000, name: 'a blue whale' },
-  { kg: 440000, name: 'a fully loaded 747' },
-  { kg: 2000000, name: 'the Space Shuttle stack' },
-  { kg: 7300000, name: 'the Eiffel Tower' },
-  { kg: 6.6e9, name: 'the Great Pyramid of Giza' },
-  { kg: 1.0e14, name: 'a volcano' },
+  { kg: 90, name: 'a fridge', art: 'fridge' },
+  { kg: 450, name: 'a grand piano', art: 'piano' },
+  { kg: 900, name: 'a dairy cow', art: 'cow' },
+  { kg: 1500, name: 'a family car', art: 'car' },
+  { kg: 6000, name: 'an African elephant', art: 'elephant' },
+  { kg: 8000, name: 'a T. rex', art: 'trex' },
+  { kg: 12000, name: 'a school bus', art: 'bus' },
+  { kg: 60000, name: 'a Leopard 2 tank', art: 'tank' },
+  { kg: 150000, name: 'a blue whale', art: 'whale' },
+  { kg: 440000, name: 'a fully loaded 747', art: 'jet' },
+  { kg: 2000000, name: 'the Space Shuttle stack', art: 'shuttle' },
+  { kg: 7300000, name: 'the Eiffel Tower', art: 'eiffel' },
+  { kg: 6.6e9, name: 'the Great Pyramid of Giza', art: 'pyramid' },
+  { kg: 1.0e14, name: 'a volcano', art: 'volcano' },
 ]
 
 export function liftedComparison(totalKg) {

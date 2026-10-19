@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useMemo, Sheet, Field, Chips, fmt, fmtDateLong } from './core.js'
 import { Ring } from './charts.js'
 import { Scanner, cameraAvailable } from './scanner.js'
-import { targets, macrosFor, sumEntries, energyUnitOf, toUnit, fromUnit, fmtEnergy, ENERGY_UNITS } from '../nutrition.js'
+import { targets, macrosFor, sumEntries, energyUnitOf, toUnit, fromUnit, fmtEnergy, ENERGY_UNITS, extraTargets } from '../nutrition.js'
 import { loadFoods, rankFoods, ESTIMATES, SOURCES, sourceOf } from '../foods.js'
 import { lookupBarcode, searchProducts, cleanBarcode, validBarcode, perServing } from '../off.js'
 import { latestBodyweight } from '../plan.js'
@@ -18,7 +18,11 @@ export function dailyTargets(profile) {
 }
 
 const UNIT_OPTS = Object.entries(ENERGY_UNITS).map(([value, label]) => ({ value, label }))
-const NUM_KEYS = [['kcal', null], ['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g']]
+const NUM_KEYS = [['kcal', null], ['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g'], ['fib', 'Fibre g'], ['na', 'Sodium mg']]
+// Fibre and sodium are optional: an empty box means "not on the label", not zero.
+const opt = v => (v === '' || v == null || !Number.isFinite(+v) ? {} : null)
+const extras = vals => ({ ...(opt(vals.fib) ?? { fib: +vals.fib }), ...(opt(vals.na) ?? { na: Math.round(+vals.na) }) })
+const extraLine = x => [x.fib != null && `${fmt(x.fib)} g fibre`, x.na != null && `${Math.round(x.na).toLocaleString()} mg sodium`].filter(Boolean).join(' · ')
 
 // Where a food's numbers came from, shown on every result.
 function SourceTag({ food }) {
@@ -93,14 +97,14 @@ function PackagedFoods({ unit, onPick }) {
 // A picked food: choose the amount; Open Food Facts numbers can be corrected first.
 function PickedFood({ food, unit, onBack, onAdd, onSaveCustom }) {
   const editable = sourceOf(food) === 'off'
-  const [vals, setVals] = useState(() => ({ kcal: toUnit(food.kcal, unit), p: food.p, c: food.c, f: food.f }))
+  const [vals, setVals] = useState(() => ({ kcal: toUnit(food.kcal, unit), p: food.p, c: food.c, f: food.f, fib: food.fib ?? '', na: food.na ?? '' }))
   const [grams, setGrams] = useState(food.serving?.g || 100)
   const [save, setSave] = useState(editable)
-  const cur = editable ? { ...food, kcal: fromUnit(vals.kcal, unit), p: +vals.p || 0, c: +vals.c || 0, f: +vals.f || 0 } : food
+  const cur = editable ? (({ fib, na, ...rest }) => ({ ...rest, kcal: fromUnit(vals.kcal, unit), p: +vals.p || 0, c: +vals.c || 0, f: +vals.f || 0, ...extras(vals) }))(food) : food
   const m = macrosFor(cur, grams)
   const serve = perServing(cur)
   const add = () => {
-    if (editable && save) onSaveCustom({ id: 'c' + uid(), src: 'custom', origin: 'off', ref: food.ref, name: cur.name, kcal: cur.kcal, p: cur.p, c: cur.c, f: cur.f, ...(food.serving ? { serving: food.serving } : {}) })
+    if (editable && save) onSaveCustom({ id: 'c' + uid(), src: 'custom', origin: 'off', ref: food.ref, name: cur.name, kcal: cur.kcal, p: cur.p, c: cur.c, f: cur.f, ...extras(cur), ...(food.serving ? { serving: food.serving } : {}) })
     onAdd({ name: cur.name, grams: +grams, src: sourceOf(food), ...(food.ref ? { ref: food.ref } : {}), ...m })
   }
   return html`<div class="stack">
@@ -108,11 +112,11 @@ function PickedFood({ food, unit, onBack, onAdd, onSaveCustom }) {
     ${(food.pack || food.ref) && sourceOf(food) !== 'afcd' && html`<p class="muted small">${[food.pack && 'Pack: ' + food.pack, food.ref && 'Barcode ' + food.ref].filter(Boolean).join(' · ')}</p>`}
     ${editable ? html`<p class="small">Per 100 g${food.complete === false ? html` · <span class="warn">some values are missing, check the label</span>` : ''}</p>
       <div class="row-4">${NUM_KEYS.map(([k, l]) => html`<${Field} label=${l || ENERGY_UNITS[unit]}><input id=${'off-' + k} class="input" inputmode="decimal" value=${vals[k]} onInput=${e => setVals({ ...vals, [k]: e.target.value })} /></${Field}>`)}</div>`
-      : html`<p class="muted small">Per 100 g: ${fmtEnergy(food.kcal, unit)} · ${fmt(food.p)}P ${fmt(food.c)}C ${fmt(food.f)}F</p>`}
+      : html`<p class="muted small">Per 100 g: ${fmtEnergy(food.kcal, unit)} · ${fmt(food.p)}P ${fmt(food.c)}C ${fmt(food.f)}F${extraLine(food) ? ' · ' + extraLine(food) : ''}</p>`}
     ${serve && html`<p class="muted small">Per ${food.serving.unit} (${food.serving.g} g): ${fmtEnergy(serve.kcal, unit)} · ${fmt(serve.p)}P ${fmt(serve.c)}C ${fmt(serve.f)}F</p>`}
     ${food.serving && html`<div class="chips chips-sm">${[0.5, 1, 2].map(n => html`<button class="chip" onClick=${() => setGrams(Math.round(food.serving.g * n))}>${n} ${food.serving.unit.split(' (')[0]}</button>`)}</div>`}
     <${Field} label="Amount (grams)"><input id="food-grams" class="input" inputmode="decimal" value=${grams} onInput=${e => setGrams(e.target.value)} /></${Field}>
-    <p class="macro-line"><b>${fmtEnergy(m.kcal, unit)}</b> · ${fmt(m.p)} g protein · ${fmt(m.c)} g carbs · ${fmt(m.f)} g fat</p>
+    <p class="macro-line"><b>${fmtEnergy(m.kcal, unit)}</b> · ${fmt(m.p)} g protein · ${fmt(m.c)} g carbs · ${fmt(m.f)} g fat${extraLine(m) ? ' · ' + extraLine(m) : ''}</p>
     ${editable && html`<label class="toggle"><input id="off-save" type="checkbox" checked=${save} onChange=${e => setSave(e.target.checked)} /> Save to my foods so it works offline next time</label>`}
     <div class="row-btns"><button class="btn ghost" onClick=${onBack}>Back</button><button class="btn primary grow" onClick=${add}>Add</button></div>
   </div>`
@@ -121,17 +125,17 @@ function PickedFood({ food, unit, onBack, onAdd, onSaveCustom }) {
 function AddFood({ open, meal, onClose, onAdd, custom, onSaveCustom, sample, unit }) {
   const [mode, setMode] = useState('search')
   const [pick, setPick] = useState(null)
-  const [quick, setQuick] = useState({ name: '', kcal: '', p: '', c: '', f: '' })
+  const [quick, setQuick] = useState({ name: '', kcal: '', p: '', c: '', f: '', fib: '', na: '' })
   const [ai, setAi] = useState({ text: '', busy: false, err: '' })
   // Labels in Australia often list kJ, so quick add can take either, whatever the display unit.
   const [qUnit, setQUnit] = useState(unit)
   useEffect(() => { if (open) setQUnit(unit) }, [open, unit])
-  const reset = () => { setQUnit(unit); setPick(null); setMode('search'); setQuick({ name: '', kcal: '', p: '', c: '', f: '' }); setAi({ text: '', busy: false, err: '' }) }
+  const reset = () => { setQUnit(unit); setPick(null); setMode('search'); setQuick({ name: '', kcal: '', p: '', c: '', f: '', fib: '', na: '' }); setAi({ text: '', busy: false, err: '' }) }
   const close = () => { reset(); onClose() }
   const addEntry = e => { onAdd({ id: uid(), meal, ...e }); close() }
   const addQuick = save => {
-    const e = { name: quick.name || 'Quick add', kcal: fromUnit(quick.kcal, qUnit), p: +quick.p || 0, c: +quick.c || 0, f: +quick.f || 0 }
-    if (save && quick.name) onSaveCustom({ id: 'c' + uid(), src: 'custom', name: e.name, kcal: e.kcal, p: e.p, c: e.c, f: e.f, serving: { unit: 'serve', g: 100 } })
+    const e = { name: quick.name || 'Quick add', kcal: fromUnit(quick.kcal, qUnit), p: +quick.p || 0, c: +quick.c || 0, f: +quick.f || 0, ...extras(quick) }
+    if (save && quick.name) onSaveCustom({ id: 'c' + uid(), src: 'custom', ...e, serving: { unit: 'serve', g: 100 } })
     addEntry({ ...e, src: 'custom' })
   }
   const estimate = async () => {
@@ -140,7 +144,7 @@ function AddFood({ open, meal, onClose, onAdd, custom, onSaveCustom, sample, uni
     try {
       const out = await sample.json(`Estimate the nutrition of this meal as eaten in Australia. Reply with JSON only: {"name": short name, "kcal": number, "p": grams protein, "c": grams carbs, "f": grams fat}. Meal: ${ai.text.slice(0, 400)}`, { modelTier: 'quick' })
       if (!out || typeof out.kcal !== 'number') throw new Error('bad')
-      setQuick({ name: String(out.name || ai.text).slice(0, 60), kcal: toUnit(out.kcal, qUnit), p: Math.round(out.p || 0), c: Math.round(out.c || 0), f: Math.round(out.f || 0) })
+      setQuick({ name: String(out.name || ai.text).slice(0, 60), kcal: toUnit(out.kcal, qUnit), p: Math.round(out.p || 0), c: Math.round(out.c || 0), f: Math.round(out.f || 0), fib: '', na: '' })
       setMode('quick'); setAi({ text: '', busy: false, err: '' })
     } catch (err) {
       setAi({ ...ai, busy: false, err: err?.code === 'not_granted' ? 'AI estimates are switched off for this page.' : 'Couldn’t estimate that one. Try describing portions, or enter it by hand.' })
@@ -166,6 +170,16 @@ function AddFood({ open, meal, onClose, onAdd, custom, onSaveCustom, sample, uni
     </div>`}
     </div>
   </${Sheet}>`
+}
+
+// Fibre and sodium against the NHMRC reference values; foods without them are noted, not guessed.
+function FibreSodium({ tot, tgt }) {
+  const bar = (label, v, t, u, k) => html`<div class="mb"><span>${label}</span><div class=${'meter m-' + k}><span style=${{ width: Math.min(100, (v / t) * 100) + '%' }}></span></div>
+    <span class="tnum">${k === 'na' ? Math.round(v).toLocaleString() : fmt(Math.round(v * 10) / 10)} / ${t.toLocaleString()} ${u}</span></div>`
+  return html`<section class="panel">
+    <div class="macro-bars">${bar('Fibre', tot.fib, tgt.fib, 'g', 'fib')}${bar('Sodium', tot.na, tgt.na, 'mg', 'na')}</div>
+    <p class="muted small">Fibre: aim for at least ${tgt.fib} g. Sodium: try to stay under ${tgt.na.toLocaleString()} mg. NHMRC reference values.${tot.unknown ? ` ${tot.unknown} ${tot.unknown === 1 ? 'food doesn’t' : 'foods don’t'} list these, so the real totals may be higher.` : ''}</p>
+  </section>`
 }
 
 export function FoodView({ app }) {
@@ -195,6 +209,7 @@ export function FoodView({ app }) {
       <${Ring} className="r-c" value=${tot.c} target=${tgt?.carbs} label="Carbs" unit="g" />
       <${Ring} className="r-f" value=${tot.f} target=${tgt?.fat} label="Fat" unit="g" />
     </section>
+    <${FibreSodium} tot=${tot} tgt=${extraTargets(profile.settings)} />
     ${tgt ? html`<p class="muted small center">${tgt.kcal - tot.kcal >= 0 ? `${fmtEnergy(tgt.kcal - tot.kcal, unit)} left` : `${fmtEnergy(tot.kcal - tgt.kcal, unit)} over`} · maintenance ≈ ${fmtEnergy(tgt.tdee, unit)}${week.length > 1 ? ` · 7-day average ${fmtEnergy(week.reduce((a, b) => a + b, 0) / week.length, unit)}` : ''}</p>`
       : html`<p class="warn small">Add your height and age in Settings to get calorie and macro targets.</p>`}
     ${entries.length === 0 && yesterday.length > 0 && html`<button class="btn" onClick=${() => setDay(yesterday.map(e => ({ ...e, id: uid() })))}>Copy yesterday's food</button>`}

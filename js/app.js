@@ -159,7 +159,7 @@ function App() {
     <main class="main">${editing
       ? html`<${SessionScreen} app=${app} session=${editing} onChange=${setEditing} onFinish=${saveEdit} onDiscard=${() => setEditing(null)} onClose=${() => setEditing(null)} />`
       : html`<${View} app=${app} initial=${tabParam} key=${shown} />`}</main>
-    ${rest && html`<${RestTimer} timer=${rest} setTimer=${setRest} sound=${state.profile.settings.restSound !== false} flash=${!!state.profile.settings.restFlash}
+    ${rest && html`<${RestTimer} timer=${rest} setTimer=${setRest} sound=${state.profile.settings.restSound !== false} loud=${state.profile.settings.restLoud !== false} flash=${!!state.profile.settings.restFlash}
       onToggleSound=${e => app.setSetting({ restSound: e.target.checked })} />`}
     ${toast && html`<${Toast} toast=${toast} onClose=${() => setToast(null)} />`}
     ${!editing && html`<nav class="tabbar" aria-label="Sections">

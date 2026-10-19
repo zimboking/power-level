@@ -58,3 +58,12 @@ test('lastNoteFor finds the newest note for that exercise', () => {
   assert.deepEqual(lastNoteFor(workouts, 'bench'), { date: '2026-10-01', text: 'Seat 4' })
   assert.equal(lastNoteFor(workouts, 'row'), null)
 })
+
+test('prNamesFor checks a past workout against the ones before it', async () => {
+  const { prNamesFor } = await import('../js/records.js')
+  const wk = (id, date, w) => ({ id, date, entries: [{ exId: 'bench', sets: [s(w, 5)] }] })
+  const all = [wk('a', '2026-10-01', 100), wk('b', '2026-10-08', 105), wk('c', '2026-10-15', 100)]
+  assert.deepEqual(prNamesFor(all, all[1]), ['Bench press'])
+  assert.deepEqual(prNamesFor(all, all[2]), [])
+  assert.deepEqual(prNamesFor(all, all[0]), [])
+})

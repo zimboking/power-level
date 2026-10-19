@@ -5,7 +5,8 @@
 // Fields: eq (barbell | dumbbell | cable | machine | bodyweight | ez | trap | smith | kettlebell |
 // band | other), p/s (primary/secondary body-map regions), mode ('reps' | 'time'), uni (logged
 // per side), fdb (free-exercise-db id, for photos and instructions), cues (3 things to think of).
-const E = (id, name, eq, p, s, fdb, cues, extra = {}) => ({ id, name, eq, p, s, fdb, cues, mode: 'reps', ...extra })
+const E = (id, name, eq, p, s, fdb, cues, extra = {}) => ({ id, name, eq, p, s, ...(fdb ? { fdb } : {}), cues, mode: 'reps', ...extra })
+const SPRINGS = 'Note your springs with the Note button'
 
 export const EXERCISES = [
   E('bench', 'Bench press', 'barbell', ['chest'], ['triceps', 'deltoids'], 'Barbell_Bench_Press_-_Medium_Grip', ['Eyes under the bar, feet planted, slight arch', 'Squeeze shoulder blades together and down', 'Touch low chest, drive up and back toward your face']),
@@ -39,6 +40,26 @@ export const EXERCISES = [
   E('skull', 'Skull crusher', 'ez', ['triceps'], [], 'EZ-Bar_Skullcrusher', ['Upper arms angled slightly back', 'Lower behind the forehead', 'Extend without flaring elbows'], { step: 1.25 }),
   E('plank', 'Plank', 'bodyweight', ['abs'], ['obliques'], 'Plank', ['Elbows under shoulders', 'Squeeze glutes, ribs down', 'Breathe, don’t sag'], { mode: 'time' }),
   E('hangleg', 'Hanging leg raise', 'bodyweight', ['abs'], ['hip-flexors'], 'Hanging_Leg_Raise', ['Dead hang, no swing', 'Curl the pelvis up', 'Lower slowly']),
+  // Reformer Pilates: resistance is springs, which vary by machine, so these log reps or time
+  // with no load, and your spring setting goes in the exercise note.
+  E('ref-footwork', 'Reformer footwork', 'reformer', ['quadriceps', 'gluteal'], ['hamstring', 'calves'], null, ['Heels, arches, then toes on the bar', 'Press out to long legs without locking', SPRINGS]),
+  E('ref-hundred', 'Reformer hundred', 'reformer', ['abs'], ['obliques', 'hip-flexors'], null, ['Head and chest curl up, arms long by your sides', 'Pump the arms, breathe in 5, out 5', SPRINGS]),
+  E('ref-straps', 'Feet in straps (leg circles)', 'reformer', ['adductors', 'hamstring'], ['abs', 'gluteal'], null, ['Pelvis still and heavy on the carriage', 'Circle from the hips, both directions', SPRINGS]),
+  E('ref-frog', 'Frog', 'reformer', ['adductors', 'gluteal'], ['hamstring', 'abs'], null, ['Heels together in the straps, knees wide', 'Press out to a long V, keep the back down', SPRINGS]),
+  E('ref-bridge', 'Reformer bridge', 'reformer', ['gluteal', 'hamstring'], ['lower-back', 'abs'], null, ['Feet on the bar, peel the spine up', 'Hold the bridge as you press the carriage', 'Roll down one bone at a time']),
+  E('ref-shortspine', 'Short spine', 'reformer', ['abs', 'hamstring'], ['lower-back', 'gluteal'], null, ['Legs up and over with control', 'Roll down slowly through the spine', SPRINGS]),
+  E('ref-elephant', 'Elephant', 'reformer', ['abs', 'hamstring'], ['deltoids', 'calves'], null, ['Hands on the bar, heels to the stops', 'Move the carriage with your belly, not your arms', 'Back stays rounded and still']),
+  E('ref-longstretch', 'Long stretch', 'reformer', ['abs', 'deltoids'], ['chest', 'gluteal'], null, ['Plank on the carriage, heels on the headrest', 'Push the carriage back from the shoulders', 'Keep a long straight line']),
+  E('ref-knee', 'Knee stretches', 'reformer', ['abs', 'quadriceps'], ['hip-flexors', 'deltoids'], null, ['Kneel, hands on the bar, back rounded', 'Push the carriage out with the knees', 'Quick and controlled, abs pulled in']),
+  E('ref-rowing', 'Reformer rowing', 'reformer', ['upper-back', 'deltoids'], ['biceps', 'abs'], null, ['Sit tall facing the straps', 'Draw the elbows back, shoulders down', SPRINGS]),
+  E('ref-chest', 'Chest expansion', 'reformer', ['upper-back', 'deltoids'], ['triceps', 'trapezius'], null, ['Kneel facing the straps', 'Press the arms back past your hips', 'Hold, look left and right, release']),
+  E('ref-pulling', 'Pulling straps', 'reformer', ['upper-back', 'lower-back'], ['deltoids', 'triceps'], null, ['Lie face down on the box', 'Pull the straps to your sides, lift the chest', SPRINGS]),
+  E('ref-armkneel', 'Kneeling arm series', 'reformer', ['deltoids', 'biceps'], ['triceps', 'abs'], null, ['Kneel tall, hips over knees', 'Curls, presses and hugs with the straps', SPRINGS]),
+  E('ref-lunge', 'Reformer lunge', 'reformer', ['quadriceps', 'gluteal'], ['hamstring', 'adductors'], null, ['Front foot on the platform, back foot on the carriage', 'Slide back to a deep lunge, hips square', SPRINGS], { uni: true }),
+  E('ref-sidesplits', 'Side splits', 'reformer', ['adductors', 'gluteal'], ['abs'], null, ['Stand one foot on the platform, one on the carriage', 'Slide wide and draw back with the inner thighs', SPRINGS]),
+  E('ref-mermaid', 'Mermaid', 'reformer', ['obliques'], ['upper-back', 'deltoids'], null, ['Sit side-on, hand on the bar', 'Reach long over the top and push the carriage out', 'Breathe into the stretch']),
+  E('ref-teaser', 'Reformer teaser', 'reformer', ['abs'], ['hip-flexors', 'obliques'], null, ['Roll up to a V with legs long', 'Arms reach toward the toes', SPRINGS]),
+  E('ref-plank', 'Reformer plank', 'reformer', ['abs'], ['deltoids', 'obliques'], null, ['Hands on the platform, feet on the carriage', 'Keep the carriage still', 'Ribs down, glutes on'], { mode: 'time' }),
   E('cablecrunch', 'Cable crunch', 'cable', ['abs'], ['obliques'], 'Cable_Crunch', ['Kneel, rope by your ears', 'Crunch ribs to hips', 'Hips stay still']),
 ]
 export const EX_BY_ID = Object.fromEntries(EXERCISES.map(e => [e.id, e]))
@@ -49,7 +70,8 @@ export const setRegistry = r => { registry = r || {} }
 
 export const exInfo = id => EX_BY_ID[id] || registry[id] || { id, name: id, eq: 'other', p: [], s: [], mode: 'reps', cues: [] }
 export const exName = id => exInfo(id).name
-export const isBodyweight = ex => ex?.eq === 'bodyweight'
+export const isReformer = ex => ex?.eq === 'reformer'
+export const isBodyweight = ex => ex?.eq === 'bodyweight' || isReformer(ex)
 export const isTimed = ex => ex?.mode === 'time'
 export const stepFor = ex => ex?.step || ({ barbell: 2.5, ez: 2.5, trap: 2.5, smith: 2.5, dumbbell: 2, kettlebell: 4, machine: 2.5, cable: 2.5 })[ex?.eq] || 2.5
 
@@ -62,7 +84,7 @@ export const barWeight = (ex, settings) => (usesPlates(ex) ? Number(settings?.ba
 const FDB = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/'
 export const imageUrls = ex => (ex?.fdb ? Array.from({ length: ex.img || 2 }, (_, i) => `${FDB}${encodeURIComponent(ex.fdb)}/${i}.jpg`) : [])
 
-export const EQUIPMENT_NAMES = { barbell: 'Barbell', dumbbell: 'Dumbbell', cable: 'Cable', machine: 'Machine', bodyweight: 'Bodyweight', ez: 'EZ bar', trap: 'Trap bar', smith: 'Smith machine', kettlebell: 'Kettlebell', band: 'Band', other: 'Other' }
+export const EQUIPMENT_NAMES = { barbell: 'Barbell', dumbbell: 'Dumbbell', cable: 'Cable', machine: 'Machine', bodyweight: 'Bodyweight', reformer: 'Reformer', ez: 'EZ bar', trap: 'Trap bar', smith: 'Smith machine', kettlebell: 'Kettlebell', band: 'Band', other: 'Other' }
 
 // The catalogue: ~750 exercises, fetched once (the service worker keeps it for offline use).
 let catalogPromise = null
@@ -72,12 +94,14 @@ export function loadCatalog() {
     return r.json()
   }).then(list => list.map(c => ({
     id: 'fdb:' + c.id, name: c.n, eq: c.eq, p: c.p, s: c.s, fdb: c.id, img: c.img, ins: c.ins, level: c.lv, category: c.c,
-    mode: /plank|hold|wall sit/i.test(c.n) ? 'time' : 'reps', uni: /one[- ]arm|single[- ]|alternat|lunge|split squat|step[- ]up/i.test(c.n), cues: [],
+    mode: /plank|hold|wall sit/i.test(c.n) || c.c === 'cardio' ? 'time' : 'reps', uni: /one[- ]arm|single[- ]|alternat|lunge|split squat|step[- ]up/i.test(c.n), cues: [],
+    // Cardio: minutes, plus distance where it means something.
+    ...(c.c === 'cardio' ? { timeUnit: 'min', ...(/rope|stair|step mill/i.test(c.n) ? {} : { distance: true, distUnit: /rowing|prowler|sled/i.test(c.n) ? 'm' : 'km' }) } : {}),
   }))).catch(err => { catalogPromise = null; throw err })
   return catalogPromise
 }
 // What gets stored in profile.exercises when you pick a catalogue exercise (no long instructions).
-export const registryEntry = ex => ({ id: ex.id, name: ex.name, eq: ex.eq, p: ex.p, s: ex.s, fdb: ex.fdb, img: ex.img, mode: ex.mode, uni: ex.uni, cues: [], custom: ex.custom || false, ...(ex.timeUnit ? { timeUnit: ex.timeUnit } : {}) })
+export const registryEntry = ex => ({ id: ex.id, name: ex.name, eq: ex.eq, p: ex.p, s: ex.s, fdb: ex.fdb, img: ex.img, mode: ex.mode, uni: ex.uni, cues: [], custom: ex.custom || false, ...(ex.timeUnit ? { timeUnit: ex.timeUnit } : {}), ...(ex.distance ? { distance: true, distUnit: ex.distUnit || 'km' } : {}) })
 
 // Core exercises show their dataset instructions too, once the catalogue has loaded.
 export async function instructionsFor(ex) {
@@ -103,6 +127,10 @@ export const STARTER_PLANS = [
   { id: 'fb', name: 'Full body', blurb: '3 days a week, great for starting out', days: [1, 3, 5], routines: [
     { id: 'r-fba', name: 'Full body A', items: [it('squat', 3, 5, 8), it('bench', 3, 5, 8), it('row', 3, 8, 10), it('plank', 3, 30, 60, 1)] },
     { id: 'r-fbb', name: 'Full body B', items: [it('deadlift', 2, 3, 6), it('ohp', 3, 6, 10), it('pullup', 3, 6, 12), it('lunge', 2, 8, 12)] },
+  ] },
+  { id: 'reformer', name: 'Reformer Pilates', blurb: 'A full-body reformer class, 2–3 days a week', days: [2, 4], routines: [
+    { id: 'r-ref', name: 'Reformer flow', items: [it('ref-footwork', 2, 10, 10, 2, { prog: 'off' }), it('ref-hundred', 1, 10, 10, 2, { prog: 'off' }), it('ref-straps', 2, 8, 10, 2, { prog: 'off' }), it('ref-bridge', 2, 8, 10, 2, { prog: 'off' }),
+      it('ref-rowing', 2, 8, 10, 2, { prog: 'off' }), it('ref-knee', 2, 10, 10, 2, { prog: 'off' }), it('ref-lunge', 2, 8, 8, 2, { prog: 'off' }), it('ref-mermaid', 1, 6, 6, 2, { prog: 'off' })] },
   ] },
   { id: '5x5', name: '5 × 5', blurb: 'Classic linear strength, 3 days a week', days: [1, 3, 5], rotation: true, routines: [
     { id: 'r-5a', name: '5×5 A', items: [it('squat', 5, 5, 5, 1, { prog: 'linear', rest: 180 }), it('bench', 5, 5, 5, 1, { prog: 'linear', rest: 180 }), it('row', 5, 5, 5, 1, { prog: 'linear' })] },

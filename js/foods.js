@@ -14,7 +14,7 @@ export const sourceOf = food => (SOURCES[food?.src] ? food.src : 'custom')
 
 // AFCD Release 3, per 100 g. Fetched once; the service worker keeps it for offline use.
 let foodsPromise = null
-export const afcdFood = ([ref, name, kcal, p, c, f]) => ({ id: 'afcd:' + ref, ref, src: 'afcd', name, kcal, p, c, f })
+export const afcdFood = ([ref, name, kcal, p, c, f, fib, na]) => ({ id: 'afcd:' + ref, ref, src: 'afcd', name, kcal, p, c, f, ...(fib != null ? { fib } : {}), ...(na != null ? { na } : {}) })
 export function loadFoods() {
   foodsPromise = foodsPromise || fetch(new URL('./data/foods.json', import.meta.url)).then(r => {
     if (!r.ok) throw new Error('foods ' + r.status)

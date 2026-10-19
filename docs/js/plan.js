@@ -4,7 +4,7 @@ import { applyFeeling, currentE1rm, exerciseHistory, warmupSets, bestE1rm, feeli
 import { nextTarget, POLICIES } from './progression.js'
 import { planJourney, guessLevel } from './journey.js'
 import { exInfo, stepFor, isTimed, isBodyweight, barWeight } from './exercises.js'
-import { TIME_UNITS, timeUnitOf, fmtDuration, START_SECONDS } from './duration.js'
+import { TIME_UNITS, timeUnitOf, fmtDuration, START_SECONDS, fmtDistance } from './duration.js'
 
 export const DEFAULT_CFG = { sets: 3, repsMin: 6, repsMax: 10, rir: 2 }
 
@@ -103,7 +103,7 @@ export const bestEverE1rm = (workouts, exId) => exerciseHistory(workouts, exId).
 export function lastTimeLine(workouts, exId, scaleLabel) {
   const last = lastEntryFor(workouts, exId)
   if (!last) return null
-  const sets = last.sets.filter(s => s.done && !s.warmup).map(s => (s.sec ? `${s.w ? s.w + ' kg × ' : ''}${fmtDuration(s.sec)}` : `${s.w ? s.w + '×' : ''}${s.r}${s.rir != null ? ` (${scaleLabel(s.rir)})` : ''}`))
+  const sets = last.sets.filter(s => s.done && !s.warmup).map(s => (s.sec ? `${s.w ? s.w + ' kg × ' : ''}${s.dist ? fmtDistance(s.dist) + ' in ' : ''}${fmtDuration(s.sec)}` : `${s.w ? s.w + '×' : ''}${s.r}${s.rir != null ? ` (${scaleLabel(s.rir)})` : ''}`))
   return { date: last.date, text: sets.join(', ') }
 }
 export { bestE1rm }

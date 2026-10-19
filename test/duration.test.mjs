@@ -41,3 +41,26 @@ test('a newly added exercise starts at a sensible time for its unit', async () =
   assert.equal(startCfg({ id: 'c:hike', mode: 'time', timeUnit: 'h' }, {}).repsMin, 3600)
   assert.deepEqual(startCfg({ id: 'bench', mode: 'reps' }, {}), { sets: 3, repsMin: 8, repsMax: 12, rir: 2 })
 })
+
+test('distance converts, formats and gives a pace', async () => {
+  const { toDist, fromDist, fmtDistance, fmtPace, tracksDistance, distUnitOf } = await import('../js/duration.js')
+  assert.equal(fromDist(5.2, 'km'), 5200)
+  assert.equal(toDist(5200, 'km'), 5.2)
+  assert.equal(fromDist(2000, 'm'), 2000)
+  assert.equal(fmtDistance(850), '850 m')
+  assert.equal(fmtDistance(5230), '5.23 km')
+  assert.equal(fmtDistance(0), '')
+  assert.equal(fmtPace(1650, 5000), '5:30 /km')
+  assert.equal(tracksDistance({ mode: 'time', distance: true }), true)
+  assert.equal(tracksDistance({ mode: 'reps', distance: true }), false)
+  assert.equal(distUnitOf({ id: 'x', distUnit: 'm' }, {}), 'm')
+})
+
+test('farther is a record, and last time shows distance with time', async () => {
+  const { recordsBroken } = await import('../js/records.js')
+  const run = (dist, sec) => ({ exId: 'c:run', sets: [{ sec, dist, done: true }] })
+  assert.deepEqual(recordsBroken(run(6000, 1800), [run(5000, 1800)]), [{ kind: 'distance', value: 6000, prev: 5000 }])
+  const { lastTimeLine } = await import('../js/plan.js')
+  const line = lastTimeLine([{ date: '2026-10-18', entries: [run(5000, 1500)] }], 'c:run', () => '')
+  assert.equal(line.text, '5 km in 25 min')
+})

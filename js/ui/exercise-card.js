@@ -9,7 +9,7 @@ import { exInfo, stepFor, usesPlates, barWeight, BAR_TYPES, EQUIPMENT_NAMES, isT
 import { POLICIES, effortLabel } from '../progression.js'
 import { policyOf, lastTimeLine, bestEverE1rm, entriesFor } from '../plan.js'
 import { bestsOf, repsAtLeast, lastNoteFor } from '../records.js'
-import { TIME_UNITS, timeUnitOf } from '../duration.js'
+import { TIME_UNITS, DIST_UNITS, timeUnitOf, tracksDistance, distUnitOf } from '../duration.js'
 import { MUSCLE_NAME } from '../muscles.js'
 import { primeAudio } from './rest.js'
 
@@ -48,6 +48,7 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
   const step = stepFor(ex)
   const timed = isTimed(ex), bw = isBodyweight(ex)
   const unit = timeUnitOf(ex, profile.settings)
+  const dist = tracksDistance(ex) ? distUnitOf(ex, profile.settings) : null
   const [unitSheet, setUnitSheet] = useState(false)
   const scale = settings.effort === 'rpe' ? 'rpe' : 'rir'
   const showEffort = settings.showEffort !== false
@@ -101,7 +102,7 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
   }
   const addSet = () => {
     const lastW = [...entry.sets].reverse().find(s => !s.warmup) || { w: entry.target.w, r: entry.cfg.repsMin, sec: entry.target.sec }
-    onChange({ ...entry, sets: [...entry.sets, { w: lastW.w, r: lastW.r, sec: lastW.sec, rest: lastW.rest, rir: null, done: false, auto: true }] })
+    onChange({ ...entry, sets: [...entry.sets, { w: lastW.w, r: lastW.r, sec: lastW.sec, dist: lastW.dist, rest: lastW.rest, rir: null, done: false, auto: true }] })
   }
   const addWarmups = () => {
     const w = warmupSets(firstWork?.w || entry.target.w, bar, step).map(s => ({ ...s, rir: null, done: false }))
@@ -135,11 +136,11 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
       <b>${policy === 'goal' ? 'Goal journey' : POLICIES[policy]?.name}</b> · ${entry.target.why}</p>
 
     <div class="sets-box">
-      <div class=${'set-row set-head' + (showEffort ? '' : ' no-effort')} aria-hidden="true"><span></span><span>${bw ? '+KG' : 'WEIGHT (KG)'}</span><span>${timed ? TIME_UNITS[unit].head : ex.uni ? 'REPS/SIDE' : 'REPS'}</span>${showEffort && html`<span>${scale.toUpperCase()}</span>`}<span></span></div>
+      <div class=${'set-row set-head' + (showEffort ? '' : ' no-effort')} aria-hidden="true"><span></span><span>${dist ? DIST_UNITS[dist].head : ex.eq === 'reformer' ? 'SPRINGS' : bw ? '+KG' : 'WEIGHT (KG)'}</span><span>${timed ? TIME_UNITS[unit].head : ex.uni ? 'REPS/SIDE' : 'REPS'}</span>${showEffort && html`<span>${scale.toUpperCase()}</span>`}<span></span></div>
       ${entry.sets.map((st, i) => {
         const tag = st.warmup ? 'W' : String(++workNo)
         const est = !st.warmup && !timed && st.r > 0 && st.w > 0 ? e1rm(st.w, st.r, st.rir ?? entry.cfg.rir) : null
-        return html`<${SetRow} key=${i + '-' + entry.sets.length} set=${st} tag=${tag} ex=${ex} step=${step} scale=${scale} showEffort=${showEffort} timed=${timed} unit=${unit} bodyweight=${bw} perSide=${ex.uni}
+        return html`<${SetRow} key=${i + '-' + entry.sets.length} set=${st} tag=${tag} ex=${ex} step=${step} scale=${scale} showEffort=${showEffort} timed=${timed} unit=${unit} dist=${dist} bodyweight=${bw} perSide=${ex.uni}
           est=${st.done ? est : null} isPr=${isRecord(st)} plates=${i === platesIdx || plateIdx === i} platesOpen=${plateIdx === i} onPlates=${() => setPlateIdx(plateIdx === i ? null : i)}
           onPatch=${p => patchSet(i, p)} onToggle=${() => toggleDone(i)} onDelete=${() => removeSet(i)} onCopy=${() => copySet(i)} onMenu=${() => setSetMenuIdx(i)} onEffort=${() => setEffortIdx(i)} />
           ${plateIdx === i && html`<${PlateBar} weight=${st.w} bar=${bar} plates=${settings.plates} label=${BAR_TYPES[ex.eq]} />`}`

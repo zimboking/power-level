@@ -34,6 +34,8 @@ export function productToFood(product) {
   const nu = product.nutriments || {}
   const kcal = kcal100(nu)
   const p = n(nu.proteins_100g), c = n(nu.carbohydrates_100g), f = n(nu.fat_100g)
+  // Fibre in g; sodium arrives in g (or only as salt, which is 2.5 × sodium) and is kept in mg.
+  const fib = n(nu.fiber_100g), naG = n(nu.sodium_100g) ?? (n(nu.salt_100g) != null ? n(nu.salt_100g) / 2.5 : null)
   const brand = (Array.isArray(product.brands) ? product.brands[0] : String(product.brands || '').split(',')[0]).trim()
   const base = String(product.product_name_en || product.product_name || product.generic_name || '').trim()
   const name = (base && brand && !base.toLowerCase().includes(brand.toLowerCase()) ? `${brand} ${base}` : base || brand || 'Product ' + product.code).slice(0, 80)
@@ -41,6 +43,7 @@ export function productToFood(product) {
   return {
     id: 'off:' + product.code, ref: String(product.code), src: 'off', name,
     kcal: kcal ?? 0, p: r1(p ?? 0), c: r1(c ?? 0), f: r1(f ?? 0),
+    ...(fib != null ? { fib: r1(fib) } : {}), ...(naG != null ? { na: Math.round(naG * 1000) } : {}),
     complete: kcal != null && p != null && c != null && f != null,
     ...(sg ? { serving: { unit: 'serve' + (product.serving_size ? ` (${String(product.serving_size).slice(0, 24)})` : ''), g: Math.round(sg) } } : {}),
     ...(product.quantity ? { pack: String(product.quantity).slice(0, 30) } : {}),
@@ -95,4 +98,5 @@ export async function searchProducts(q, opts) {
 export const perServing = food => (food.serving ? {
   kcal: Math.round(food.kcal * food.serving.g / 100),
   p: r1(food.p * food.serving.g / 100), c: r1(food.c * food.serving.g / 100), f: r1(food.f * food.serving.g / 100),
+  ...(food.fib != null ? { fib: r1(food.fib * food.serving.g / 100) } : {}), ...(food.na != null ? { na: Math.round(food.na * food.serving.g / 100) } : {}),
 } : null)

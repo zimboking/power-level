@@ -78,3 +78,9 @@ from openGym (AGPL-3.0). No openGym source code is included here.
 released under the **Apache License 2.0**. Changes: rewritten from React + Tailwind to Preact + htm,
 stored in Power Level's state and backups, themed for light and dark, mock history and the
 simulated Squad tab removed.
+
+## Fibre and sodium guides
+
+Fibre (Adequate Intake: 30 g men, 25 g women) and sodium (Suggested Dietary Target: 2000 mg) come
+from the NHMRC Nutrient Reference Values for Australia and New Zealand. Fibre and sodium per food
+come from the AFCD (see above) or Open Food Facts.

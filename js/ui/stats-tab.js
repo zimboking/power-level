@@ -12,6 +12,8 @@ import { liftedComparison, formatKg, LIFTED_LADDER } from '../power.js'
 import { exInfo } from '../exercises.js'
 import { addDays, weekOf } from '../schedule.js'
 import { activeGoal } from '../plan.js'
+import { shareWorkout } from './share-card.js'
+import { prNamesFor } from '../records.js'
 import { today } from '../store.js'
 
 function Tile({ icon, label, value, tone }) {
@@ -102,6 +104,7 @@ function History({ app }) {
     <${ActionSheet} open=${!!menu} title=${menu ? `${menu.name} · ${fmtDate(menu.date)}` : ''} onClose=${() => setMenu(null)} actions=${menu ? [
       { label: 'Edit or move date', icon: 'edit', hint: 'Records are re-read from the corrected history', onClick: () => app.editWorkout(menu) },
       { label: 'Repeat this workout', icon: 'copy', onClick: () => app.repeatWorkout(menu) },
+      { label: 'Share workout', icon: 'link', hint: 'A picture and summary for the group chat', onClick: async () => { const res = await shareWorkout(menu, { prNames: prNamesFor(app.state.workouts, menu) }); if (res === 'copied') app.toast('Workout copied. Paste it in the group chat.'); else if (res?.text) app.toast('Sharing isn’t available in this browser.') } },
       { label: 'Delete workout', icon: 'trash', danger: true, onClick: () => { const w = menu; app.update(s => ({ ...s, workouts: s.workouts.filter(x => x.id !== w.id) }), ['w:' + w.id]); app.toast({ text: 'Workout deleted', action: { label: 'Undo', run: () => app.update(s => ({ ...s, workouts: [...s.workouts, w] }), ['w:' + w.id]) } }) } },
     ] : []} />
   </div>`

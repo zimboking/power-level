@@ -7,7 +7,9 @@ import { RoutineEditor } from './plan-tab.js'
 import { groupRoutines, saveRoutine as storeRoutine } from '../routines.js'
 import { buildEntry, DEFAULT_CFG, entriesFor, startCfg } from '../plan.js'
 import { recordsBroken } from '../records.js'
-import { fmtDuration } from '../duration.js'
+import { fmtDuration, fmtDistance } from '../duration.js'
+import { liftedSvg } from './lifted-art.js'
+import { shareWorkout } from './share-card.js'
 import { FEELINGS, workoutVolume } from '../strength.js'
 import { liftedComparison, formatKg } from '../power.js'
 import { exInfo } from '../exercises.js'
@@ -87,18 +89,40 @@ const RECORD_TEXT = {
   reps: r => `${r.value} reps${r.w > 0 ? ` at ${fmt(r.w)} kg` : ''} (was ${r.prev})`,
   volume: r => `Volume: ${formatKg(r.value)} (was ${formatKg(r.prev)})`,
   time: r => `Longest: ${fmtDuration(r.value)} (was ${fmtDuration(r.prev)})`,
+  distance: r => `Farthest: ${fmtDistance(r.value)} (was ${fmtDistance(r.prev)})`,
 }
 
-function Summary({ result, onDone }) {
+/** The share button and what happens after it. */
+export function ShareWorkoutButton({ app, workout, prNames, label = 'Share workout', cls = 'btn big' }) {
+  const [busy, setBusy] = useState(false)
+  const [fallback, setFallback] = useState('')
+  const go = async () => {
+    setBusy(true)
+    const res = await shareWorkout(workout, { prNames })
+    setBusy(false)
+    if (res === 'copied') app.toast('Workout copied. Paste it in the group chat.')
+    else if (res?.text) setFallback(res.text)
+  }
+  return html`<button class=${cls} disabled=${busy} onClick=${go}><${Icon} name="link" size=${18} /> ${busy ? 'Getting it ready…' : label}</button>
+    ${fallback && html`<textarea class="input share-text" readonly rows="8" aria-label="Workout summary to copy" onFocus=${e => e.target.select()}>${fallback}</textarea>`}`
+}
+
+function Summary({ app, result, onDone }) {
   const cmp = liftedComparison(result.volume)
+  const times = cmp.times >= 10 ? Math.round(cmp.times) : cmp.times.toFixed(1)
   return html`<div class="stack summary">
     <div class="card hero-card"><p class="eyebrow">Workout saved</p>
       <p class="big-num">${formatKg(result.volume)}</p>
-      <p>${cmp.best ? html`That's <b>${cmp.times >= 10 ? Math.round(cmp.times) : cmp.times.toFixed(1)} × ${cmp.best.name.replace(/^an? /, '')}</b>.` : 'Every kilo counts.'}</p>
+      <figure class="lift-art" aria-label=${cmp.best ? `About ${times} times ${cmp.best.name}` : 'A dumbbell'}>
+        <div class="lift-art-pic" dangerouslySetInnerHTML=${{ __html: liftedSvg(cmp.best?.art || 'dumbbell', { width: 240, height: 150 }) }}></div>
+        ${cmp.best && html`<span class="lift-times">× ${times}</span>`}
+      </figure>
+      <p>${cmp.best ? html`That's <b>${times} × ${cmp.best.name.replace(/^an? /, '')}</b>.` : 'Every kilo counts.'}</p>
       <p class="muted small">${result.sets} sets · ${result.minutes} min · power level ${result.before.toLocaleString()} → <b>${result.after.toLocaleString()}</b></p></div>
     ${result.prs.length > 0 && html`<div class="card"><p class="section-label">New records</p>${result.prs.map(p => html`<div class="pr-group"><p class="pr-line"><span class="pr">PR</span> <b>${p.name}</b></p>
       <ul class="pr-list">${p.records.map(r => html`<li>${RECORD_TEXT[r.kind](r)}</li>`)}</ul></div>`)}</div>`}
     ${result.next && html`<p class="muted center">Next up: <b>${result.next.routine.name}</b> on ${fmtWeekday(result.next.date)}.</p>`}
+    <${ShareWorkoutButton} app=${app} workout=${result.workout} prNames=${result.prs.map(p => p.name)} />
     <button class="btn primary big" onClick=${onDone}>Done</button>
   </div>`
 }
@@ -224,7 +248,7 @@ export function WorkoutTab({ app }) {
   const [chosen, setChosen] = useState(null)
   const [editing, setEditing] = useState(null)
   const openCustom = (opts = { feeling: 'great', note: '', warm: true }) => { setStarting(false); setDraft({ id: 'r' + uid(), name: '', items: [] }); setCustom(opts) }
-  if (result) return html`<${Summary} result=${result} onDone=${() => { setResult(null); app.go('home') }} />`
+  if (result) return html`<${Summary} app=${app} result=${result} onDone=${() => { setResult(null); app.go('home') }} />`
   if (active) {
     const finish = () => {
       const w = toWorkout(active)
@@ -234,7 +258,7 @@ export function WorkoutTab({ app }) {
       const prs = w.entries.map(e => ({ name: exInfo(e.exId).name, records: recordsBroken(e, entriesFor(workouts, e.exId)) })).filter(p => p.records.length)
       const all = [...workouts, w]
       app.update(s => ({ ...s, active: null, workouts: [...s.workouts, w] }), ['profile', 'w:' + w.id])
-      setResult({ volume: workoutVolume(w), sets: w.entries.reduce((n, e) => n + e.sets.filter(x => !x.warmup).length, 0), minutes: w.durationMin, prs, before, after: app.powerAfter(all), next: nextSession(profile, all, w.date) })
+      setResult({ workout: w, volume: workoutVolume(w), sets: w.entries.reduce((n, e) => n + e.sets.filter(x => !x.warmup).length, 0), minutes: w.durationMin, prs, before, after: app.powerAfter(all), next: nextSession(profile, all, w.date) })
     }
     return html`<${SessionScreen} app=${app} session=${active} onChange=${s => app.update(st => ({ ...st, active: s }), ['profile'])}
       onFinish=${finish} onDiscard=${() => { app.update(s => ({ ...s, active: null }), ['profile']); app.stopRest(); app.toast('Workout discarded') }} onClose=${() => app.go('home')} />`

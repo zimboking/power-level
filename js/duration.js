@@ -31,3 +31,26 @@ export function fmtDuration(sec) {
   const h = Math.floor(t / 3600), m = Math.round((t % 3600) / 60)
   return m ? `${h} h ${m} min` : `${h} h`
 }
+
+// Distance for cardio: stored in metres on each set (`dist`), shown in km or m.
+export const DIST_UNITS = {
+  km: { label: 'Kilometres', short: 'km', head: 'KM', per: 1000, step: 0.1 },
+  m: { label: 'Metres', short: 'm', head: 'METRES', per: 1, step: 50 },
+}
+export const MAX_METRES = 1e6
+/** Does this exercise log distance as well as time? */
+export const tracksDistance = ex => ex?.mode === 'time' && !!ex?.distance
+export const distUnitOf = (ex, settings) => {
+  const u = settings?.distUnits?.[ex?.id] || ex?.distUnit
+  return DIST_UNITS[u] ? u : 'km'
+}
+export const toDist = (m, unit) => (m ? Math.round((m / DIST_UNITS[unit].per) * 100) / 100 : 0)
+export const fromDist = (value, unit) => Math.min(MAX_METRES, Math.max(0, Math.round((+value || 0) * DIST_UNITS[unit].per)))
+/** Metres → "850 m", "5.2 km". */
+export const fmtDistance = m => (!m ? '' : m < 1000 ? `${Math.round(m)} m` : `${Math.round(m / 10) / 100} km`)
+/** Pace for runs and rides: "5:30 /km". */
+export function fmtPace(sec, m) {
+  if (!(sec > 0 && m >= 100)) return ''
+  const per = sec / (m / 1000)
+  return `${Math.floor(per / 60)}:${String(Math.round(per % 60)).padStart(2, '0')} /km`
+}
