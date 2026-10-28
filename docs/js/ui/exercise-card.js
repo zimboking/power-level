@@ -5,7 +5,7 @@ import { SetRow, EffortSheet } from './set-row.js'
 import { ExerciseDemo } from './media.js'
 import { ExerciseMuscles } from './bodymap.js'
 import { e1rm, nextSetAdvice, platesFor, warmupSets } from '../strength.js'
-import { exInfo, stepFor, usesPlates, barWeight, BAR_TYPES, EQUIPMENT_NAMES, isTimed, isBodyweight, instructionsFor } from '../exercises.js'
+import { exInfo, stepFor, usesPlates, barWeight, BAR_TYPES, EQUIPMENT_NAMES, isTimed, isBodyweight, isReformer, withLoadPref, instructionsFor } from '../exercises.js'
 import { POLICIES, effortLabel } from '../progression.js'
 import { policyOf, lastTimeLine, bestEverE1rm, entriesFor } from '../plan.js'
 import { bestsOf, repsAtLeast, lastNoteFor } from '../records.js'
@@ -71,6 +71,11 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
   const firstWork = entry.sets.find(s => !s.warmup)
   const policy = entry.cfg.goal ? 'goal' : policyOf(entry.cfg, ex, settings)
 
+  // Switching to bodyweight clears the weight on this exercise's sets (a belt can be added back).
+  const setLoad = bodyweight => {
+    app.setSetting({ loadPrefs: withLoadPref(settings.loadPrefs, ex, bodyweight) })
+    if (bodyweight) onChange({ ...entry, sets: entry.sets.map(s => ({ ...s, w: 0 })) })
+  }
   const patchSet = (i, patch) => onChange({ ...entry, sets: entry.sets.map((s, j) => (j === i ? { ...s, ...patch, auto: false } : s)) })
   const toggleDone = i => {
     primeAudio()
@@ -164,6 +169,7 @@ export function ExerciseCard({ entry, label, index, count, app, view, onChange, 
       { label: entry.cfg.pyramid ? 'Turn off pyramid sets' : 'Pyramid sets', icon: 'stats', hint: 'Own weight, reps and rest per set', onClick: () => setCfg({ pyramid: !entry.cfg.pyramid }) },
       { label: 'Rest time', icon: 'timer', hint: fmtClock(entry.cfg.rest || settings.rest || 150), onClick: () => setRestFor('exercise') },
       timed && { label: 'Time in', icon: 'timer', hint: TIME_UNITS[unit].label, onClick: () => setUnitSheet(true) },
+      !timed && !isReformer(ex) && { label: bw ? 'Use weight' : 'Bodyweight, no weight', icon: 'dumbbell', hint: bw ? 'Logged as bodyweight now' : 'For chin-ups, push-ups, dips…', onClick: () => setLoad(!bw) },
       index > 0 && { label: 'Move up', icon: 'up', onClick: () => onMove(-1) },
       index < count - 1 && { label: 'Move down', icon: 'down', onClick: () => onMove(1) },
       { label: 'Remove exercise', icon: 'trash', danger: true, onClick: onRemove },

@@ -41,6 +41,13 @@ export function newSession(app, routine, { feeling = 'great', note = '', warm = 
   return { id: uid(), date, startedAt: Date.now(), feeling, note, name: routine?.name || 'Workout', routineId: routine?.id || null, entries, focus: 0 }
 }
 
+// A workout you forgot to log: the routine's planned sets for that day, already ticked, so you
+// only change what was different. No warm-ups.
+export function pastSession(app, routine, date) {
+  const s = newSession(app, routine, { date, warm: false })
+  return { ...s, editing: true, isNew: true, durationMin: 60, entries: s.entries.map(e => ({ ...e, sets: e.sets.map(st => ({ ...st, done: true })) })) }
+}
+
 // A saved workout opened for editing: every set is shown as done, targets read "as logged".
 export function sessionFromWorkout(w) {
   return {
@@ -55,6 +62,26 @@ export function toWorkout(session) {
     .filter(e => e.sets.length)
   const durationMin = session.editing ? session.durationMin || 0 : Math.round((Date.now() - session.startedAt) / 60000)
   return { id: session.id, date: session.date, name: session.name, routineId: session.routineId || null, feeling: session.feeling, note: session.note || '', durationMin, entries }
+}
+
+// Pick the day and what you did; the session screen then opens to fill it in.
+export function LogPastSheet({ open, date, onClose, app, onLog }) {
+  const [day, setDay] = useState(date)
+  const [pick, setPick] = useState('')
+  useEffect(() => { if (open) { setDay(date); setPick('') } }, [open, date])
+  const { profile, workouts } = app.state
+  const already = workouts.filter(w => w.date === day)
+  return html`<${Sheet} open=${open} title="Log a past workout" onClose=${onClose}>
+    <div class="group"><label class="toggle-row" for="past-date"><span class="row-main"><span>Day you trained</span><small>${day ? fmtWeekday(day) : ''}</small></span>
+      <input id="past-date" type="date" class="input date-input" value=${day} max=${today()} onChange=${e => e.target.value && setDay(e.target.value)} /></label></div>
+    ${already.length > 0 && html`<p class="muted small">Already logged that day: ${already.map(w => w.name).join(', ')}. This adds another workout; to change that one, open it from Stats → History.</p>`}
+    <p class="section-label">What did you do?</p>
+    <div class="group">
+      ${groupRoutines(profile).flatMap(g => g.routines).map(r => html`<button class=${'row-btn' + (pick === r.id ? ' on' : '')} onClick=${() => setPick(r.id)}><span class="row-main"><span>${r.name}</span><small>${r.items.map(i => exInfo(i.exId).name).join(' · ')}</small></span>${pick === r.id && html`<${Icon} name="check" />`}</button>`)}
+      <button class=${'row-btn' + (pick === '' ? ' on' : '')} onClick=${() => setPick('')}><span class="row-main"><span>Just some exercises</span><small>Start empty and add what you did</small></span>${pick === '' && html`<${Icon} name="check" />`}</button>
+    </div>
+    <button class="btn primary big" disabled=${!day || day > today()} onClick=${() => onLog((profile.templates || []).find(r => r.id === pick) || null, day)}>Next</button>
+  </${Sheet}>`
 }
 
 export function StartSheet({ open, onClose, app, routine, onStart, onCustom }) {
@@ -202,6 +229,7 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
     </header>
     <div class="progress" role="progressbar" aria-valuenow=${done} aria-valuemin="0" aria-valuemax=${total} aria-label="Sets done"><span style=${{ width: (total ? (done / total) * 100 : 0) + '%' }}></span></div>
     ${session.feeling && session.feeling !== 'great' && html`<p class="feeling-note">${FEELINGS[session.feeling].label}: loads eased today.${session.note ? ' “' + session.note + '”' : ''}</p>`}
+    ${session.isNew && session.entries.length > 0 && html`<p class="muted small">Sets are filled in from your plan and ticked. Change them to what you actually did, untick or delete any you skipped, then save.</p>`}
     ${session.editing && html`<div class="group"><label class="toggle-row" for="edit-date"><span class="row-main"><span>Date</span><small>Move it to the day you trained</small></span><input id="edit-date" type="date" class="input date-input" value=${session.date} max=${today()} onChange=${e => e.target.value && set({ date: e.target.value })} /></label></div>`}
 
     ${entries.length === 0 && html`<div class="card empty"><p class="empty-title">Add your first exercise</p><p class="empty-body">Targets, warm-ups, plates and rest are worked out for you.</p></div>`}
@@ -276,6 +304,11 @@ export function WorkoutTab({ app }) {
     <button class="card custom-card" onClick=${() => openCustom()}>
       <span class="today-ic"><${Icon} name="edit" /></span>
       <span class="row-main"><span class="title-3">Custom workout</span><small>Build today's session your way: exercises, sets, reps and rest. Save it as a routine if you like it.</small></span>
+      <${Icon} name="right" size=${18} />
+    </button>
+    <button class="card custom-card" onClick=${() => app.logPast()}>
+      <span class="today-ic"><${Icon} name="history" /></span>
+      <span class="row-main"><span class="title-3">Forgot to log one?</span><small>Add a workout to an earlier day: pick a routine or the exercises you did.</small></span>
       <${Icon} name="right" size=${18} />
     </button>
     ${profile.templates.length > 0 && html`<div class="card-head"><p class="section-label">Your routines</p><button class="text-btn" onClick=${() => app.go('plan', 'routines')}>Organise</button></div>

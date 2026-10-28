@@ -3,11 +3,11 @@
 import { html, render, useState, useEffect, useMemo, useRef, Icon, ActionSheet } from './ui/core.js'
 import { loadAll, createSaver, isStandalone, requestPersistence, uid, today } from './store.js'
 import { powerLevel, tierFor } from './power.js'
-import { setRegistry, registryEntry } from './exercises.js'
+import { setRegistry, setLoadPrefs, registryEntry } from './exercises.js'
 import { addDays } from './schedule.js'
 import { HomeView } from './ui/home.js'
 import { SettingsSheet } from './ui/settings.js'
-import { WorkoutTab, SessionScreen, sessionFromWorkout, toWorkout, newSession } from './ui/workout.js'
+import { WorkoutTab, SessionScreen, LogPastSheet, sessionFromWorkout, toWorkout, newSession, pastSession } from './ui/workout.js'
 import { PlanTab } from './ui/plan-tab.js'
 import { StatsTab } from './ui/stats-tab.js'
 import { FoodView } from './ui/food.js'
@@ -54,6 +54,7 @@ function App() {
   const [more, setMore] = useState(false)
   const [powerUp, setPowerUp] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [pastDate, setPastDate] = useState(null) // the Log a past workout sheet
   const [loadErr, setLoadErr] = useState('')
   const stateRef = useRef(null)
   const saver = useRef(null)
@@ -87,7 +88,7 @@ function App() {
   const capyHidden = state && !capyOn(state.profile.settings)
   useEffect(() => { if (capyHidden && tab === 'capyspa') setTab('home') }, [capyHidden, tab])
 
-  if (state) setRegistry(state.profile.exercises)
+  if (state) { setRegistry(state.profile.exercises); setLoadPrefs(state.profile.settings.loadPrefs) }
   const level = useMemo(() => (state ? powerLevel(state.workouts) : 0), [state?.workouts])
   const tier = tierFor(level)
   const prevTier = useRef(null)
@@ -133,7 +134,7 @@ function App() {
     resting: !!rest,
     openSettings: () => setSettings(true),
     editWorkout: w => setEditing(sessionFromWorkout(w)),
-    logPast: () => setEditing({ ...newSession({ state }, null, { date: addDays(today(), -1), warm: false }), editing: true, isNew: true, durationMin: 60 }),
+    logPast: (date = addDays(today(), -1)) => setPastDate(date),
     repeatWorkout: w => {
       if (state.active) { setToast({ text: 'Finish or discard the current workout first.' }); return }
       const routine = { id: w.routineId, name: w.name, items: w.entries.map(e => ({ ...(e.cfg || {}), exId: e.exId, sets: e.sets.filter(s => !s.warmup).length, group: e.group ? e.group.replace(/^g-?/, '') : undefined })) }
@@ -159,7 +160,7 @@ function App() {
     <main class="main">${editing
       ? html`<${SessionScreen} app=${app} session=${editing} onChange=${setEditing} onFinish=${saveEdit} onDiscard=${() => setEditing(null)} onClose=${() => setEditing(null)} />`
       : html`<${View} app=${app} initial=${tabParam} key=${shown} />`}</main>
-    ${rest && html`<${RestTimer} timer=${rest} setTimer=${setRest} sound=${state.profile.settings.restSound !== false} loud=${state.profile.settings.restLoud !== false} flash=${!!state.profile.settings.restFlash}
+    ${rest && html`<${RestTimer} timer=${rest} setTimer=${setRest} sound=${state.profile.settings.restSound !== false} loud=${state.profile.settings.restLoud !== false} flash=${!!state.profile.settings.restFlash} notify=${!!state.profile.settings.restNotify}
       onToggleSound=${e => app.setSetting({ restSound: e.target.checked })} />`}
     ${toast && html`<${Toast} toast=${toast} onClose=${() => setToast(null)} />`}
     ${!editing && html`<nav class="tabbar" aria-label="Sections">
@@ -176,6 +177,7 @@ function App() {
       { label: 'Settings', icon: 'settings', onClick: () => setSettings(true) },
     ]} />
     <${SettingsSheet} open=${settings} onClose=${() => setSettings(false)} app=${app} />
+    <${LogPastSheet} open=${!!pastDate} date=${pastDate} app=${app} onClose=${() => setPastDate(null)} onLog=${(routine, date) => { setPastDate(null); setEditing(pastSession({ state }, routine, date)) }} />
     <${SharedRoutineSheet} app=${app} />
     ${powerUp && html`<${PowerUp} tier=${powerUp} onDone=${() => setPowerUp(null)} />`}
   </div>`

@@ -1,6 +1,9 @@
 // Rest countdown. Starts by itself after a set (or by hand), counts down with a ring, beeps
-// for the last 3 seconds and at zero, buzzes the phone, and can be paused, nudged or expanded.
+// for the last 3 seconds and at zero, buzzes the phone, can notify, and can be paused, nudged or expanded.
 import { html, useState, useEffect, useRef } from './core.js'
+import { primeAudio, scheduleRestSounds, cancelRestSounds, notifyRestOver } from '../chime.js'
+
+export { primeAudio, restChime, canNotify } from '../chime.js'
 
 export const REST_PRESETS = [60, 90, 120, 150, 180, 240, 300]
 export const fmtClock = sec => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
@@ -15,43 +18,6 @@ export function adjustTimer(t, delta) {
 }
 export const togglePause = t => (t.pausedLeft != null ? { total: t.total, endsAt: Date.now() + t.pausedLeft * 1000 } : { total: t.total, pausedLeft: timeLeft(t) })
 
-// Sound needs a tap first (browser rule); the set's ✓ tap counts, so the context is made then.
-let audio = null
-export function primeAudio() {
-  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume() } catch { audio = null }
-}
-// A limiter on the way out lets the chime run hot without crackling.
-let out = null
-const output = () => {
-  if (out) return out
-  const c = audio.createDynamicsCompressor()
-  c.threshold.value = -6; c.knee.value = 0; c.ratio.value = 20; c.attack.value = 0.001; c.release.value = 0.1
-  c.connect(audio.destination)
-  out = c
-  return out
-}
-// Loud: a square wave plus a sine an octave up, at full level. Square waves carry over gym noise
-// far better than a plain sine; phones still cap it at their own volume.
-function beep(freq, ms, loud = false, at = 0) {
-  if (!audio) return
-  try {
-    const t0 = audio.currentTime + at, t1 = t0 + ms / 1000
-    const g = audio.createGain()
-    g.gain.setValueAtTime(0.0001, t0)
-    g.gain.exponentialRampToValueAtTime(loud ? 1 : 0.35, t0 + 0.008)
-    g.gain.setValueAtTime(loud ? 1 : 0.35, t1 - 0.04)
-    g.gain.exponentialRampToValueAtTime(0.0001, t1)
-    g.connect(loud ? output() : audio.destination)
-    const tones = loud ? [['square', freq], ['sine', freq * 2]] : [['sine', freq]]
-    for (const [type, f] of tones) { const o = audio.createOscillator(); o.type = type; o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t1 + 0.02) }
-  } catch { /* audio unavailable */ }
-}
-/** The rest-over alert: three rising chimes, twice when loud. */
-export function restChime(loud) {
-  const notes = loud ? [880, 1175, 1568, 880, 1175, 1568] : [990, 990]
-  notes.forEach((f, i) => beep(f, loud ? 180 : i ? 320 : 220, loud, i * (loud ? 0.22 : 0.28) + (loud && i >= 3 ? 0.25 : 0)))
-}
-
 function Dial({ left, total, size }) {
   const r = 44, c = 2 * Math.PI * r
   const frac = total > 0 ? left / total : 0
@@ -62,7 +28,7 @@ function Dial({ left, total, size }) {
   </svg>`
 }
 
-export function RestTimer({ timer, setTimer, sound, loud = true, flash, onToggleSound }) {
+export function RestTimer({ timer, setTimer, sound, loud = true, flash, notify, onToggleSound }) {
   const [now, setNow] = useState(Date.now())
   const [big, setBig] = useState(false)
   const lastBeep = useRef(null)
@@ -72,12 +38,21 @@ export function RestTimer({ timer, setTimer, sound, loud = true, flash, onToggle
   const paused = timer.pausedLeft != null
   const done = left === 0 && !paused
 
+  // Queue the sounds whenever the timer starts, changes or resumes; call them off when it stops.
+  useEffect(() => {
+    const queue = () => (sound && !paused ? scheduleRestSounds(timer.endsAt, loud) : cancelRestSounds())
+    queue()
+    // Coming back to the app: the audio clock may have been paused (iPhone), so queue afresh.
+    const onVis = () => { if (document.visibilityState === 'visible') { primeAudio(); queue() } }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { document.removeEventListener('visibilitychange', onVis); cancelRestSounds() }
+  }, [timer.endsAt, paused, sound, loud])
+
   useEffect(() => {
     if (paused || lastBeep.current === left) return
     lastBeep.current = left
-    if (sound && left > 0 && left <= 3) beep(660, 120, loud)
     if (left === 0) {
-      if (sound) restChime(loud)
+      if (notify && document.visibilityState === 'hidden') notifyRestOver()
       // Android buzzes (iPhones ignore this): long pulses you'll feel through a pocket.
       try { navigator.vibrate?.(loud ? [500, 150, 500, 150, 700] : [250, 120, 250]) } catch { /* no vibration */ }
       if (flash) { setFlashing(true); setTimeout(() => setFlashing(false), 2600) }

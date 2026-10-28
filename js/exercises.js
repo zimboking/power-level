@@ -71,7 +71,17 @@ export const setRegistry = r => { registry = r || {} }
 export const exInfo = id => EX_BY_ID[id] || registry[id] || { id, name: id, eq: 'other', p: [], s: [], mode: 'reps', cues: [] }
 export const exName = id => exInfo(id).name
 export const isReformer = ex => ex?.eq === 'reformer'
-export const isBodyweight = ex => ex?.eq === 'bodyweight' || isReformer(ex)
+export const defaultBodyweight = ex => ex?.eq === 'bodyweight' || isReformer(ex)
+// Per-exercise choice from the exercise menu (settings.loadPrefs): 'bw' logs it as bodyweight with
+// no weight (a belt or vest can still be added), 'kg' always asks for a weight.
+let loadPrefs = {}
+export const setLoadPrefs = m => { loadPrefs = m || {} }
+export const isBodyweight = ex => (loadPrefs[ex?.id] === 'bw' ? true : loadPrefs[ex?.id] === 'kg' ? false : defaultBodyweight(ex))
+// The settings.loadPrefs that makes `ex` bodyweight (true) or weighted (false); defaults aren't stored.
+export function withLoadPref(prefs, ex, bodyweight) {
+  const { [ex.id]: _, ...rest } = prefs || {}
+  return bodyweight === defaultBodyweight(ex) ? rest : { ...rest, [ex.id]: bodyweight ? 'bw' : 'kg' }
+}
 export const isTimed = ex => ex?.mode === 'time'
 export const stepFor = ex => ex?.step || ({ barbell: 2.5, ez: 2.5, trap: 2.5, smith: 2.5, dumbbell: 2, kettlebell: 4, machine: 2.5, cable: 2.5 })[ex?.eq] || 2.5
 

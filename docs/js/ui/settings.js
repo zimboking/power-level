@@ -6,14 +6,29 @@ import { emptyPlan } from '../schedule.js'
 import { today, isStandalone, makeBackup, parseBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 import { capyOn } from '../water.js'
-import { primeAudio, restChime } from './rest.js'
+import { primeAudio, restChime, canNotify } from './rest.js'
 import { POLICIES } from '../progression.js'
 import { DEFAULT_PROGS, defaultProgOf } from '../plan.js'
 import { listPhotos, putPhotos, makePhotoBackup, parsePhotoBackup, newPhotos } from '../photos.js'
 
+// A phone notification when rest ends, for when you're in another app or the screen is off.
+const NOTIFY_HINT = {
+  default: 'Pops up a notification if you’re in another app when rest ends. Works on Android; iPhones don’t allow it for web apps yet.',
+  denied: 'Notifications are blocked for this site. Allow them in your browser’s site settings, then switch this on.',
+}
+const notifyPermission = () => (canNotify() ? Notification.permission : 'unsupported')
+
 export function SettingsSheet({ open, onClose, app }) {
   const s = app.state.profile.settings
   const set = patch => app.setSetting(patch)
+  const [notifyState, setNotifyState] = useState(notifyPermission)
+  const toggleNotify = async on => {
+    if (!on) { set({ restNotify: false }); return }
+    let perm = notifyPermission()
+    if (perm === 'default') { try { perm = await Notification.requestPermission() } catch { perm = 'denied' } }
+    setNotifyState(perm)
+    set({ restNotify: perm === 'granted' })
+  }
   const [json, setJson] = useState('')
   const [msg, setMsg] = useState('')
   const [pending, setPending] = useState(null)
@@ -85,6 +100,7 @@ export function SettingsSheet({ open, onClose, app }) {
       ${s.restSound !== false && html`<div class="toggle-row"><span class="row-main"><span>Chime</span><small>Loud cuts through a busy gym and buzzes harder. Turn your phone's volume up too.</small></span>
         <${Segmented} small label="Chime" value=${s.restLoud === false ? 'soft' : 'loud'} onChange=${v => set({ restLoud: v === 'loud' })} options=${[{ value: 'loud', label: 'Loud' }, { value: 'soft', label: 'Soft' }]} /></div>
         <button class="row-btn" onClick=${() => { primeAudio(); restChime(s.restLoud !== false) }}><span class="row-main"><span>Test the chime</span></span></button>`}
+      ${canNotify() && html`<${Toggle} id="set-notify" checked=${!!s.restNotify && notifyState === 'granted'} onChange=${toggleNotify} label="Notify me when rest ends" hint=${NOTIFY_HINT[notifyState] || NOTIFY_HINT.default} />`}
       <div class="toggle-row"><span class="row-main"><span>Week starts on</span></span><${Segmented} small label="Week starts on" value=${plan.weekStart} onChange=${v => app.update(st => ({ ...st, profile: { ...st.profile, plan: { ...plan, weekStart: v } } }), ['profile'])} options=${[{ value: 1, label: 'Monday' }, { value: 0, label: 'Sunday' }]} /></div>
     </div>
     <p class="section-label">Extras</p>

@@ -48,6 +48,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/off.js` | Open Food Facts barcode lookup and name search (online only) |
 | `js/exercises.js` | 32 core exercises + catalogue loader + registry of picked exercises |
 | `js/store.js` | Persistence (Claude artifact db or localStorage), backups |
+| `js/chime.js` | Rest sounds queued on the audio clock, rest-over notification (no UI, testable) |
 | `js/water.js` | CapySpa water tracker: drink logs per day, hydration ratios, stages, streak, mood insight |
 | `js/data/catalog.json`, `body.json` | Generated; see `tools/build-data.mjs` and NOTICE.md |
 | `js/data/foods.json` | Generated from FSANZ AFCD Release 3: `[key, name, kcal, p, c, f, fibre g, sodium mg]` |
@@ -61,7 +62,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs test/rest-load.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```
@@ -105,6 +106,15 @@ Data files (only when the sources change):
   zero, and `sumEntries` counts how many foods lack them. Guides are NHMRC values (`nutrition.js`).
 - **Cardio distance** is `dist` in metres on timed sets, for exercises with `distance: true`
   (catalogue cardio, or custom). **Reformer** exercises are no-load (`isBodyweight`); springs go in the note.
+- **Rest sounds** are queued on the Web Audio clock when rest starts (`scheduleRestSounds`) and
+  re-queued on any change and when the app comes back to the front, because phones throttle page
+  timers in the background. iPhones still pause web audio when you leave the app; the optional
+  rest-over notification (`settings.restNotify`, shown by the service worker) only helps on
+  Android. A real background alert on iPhone needs Web Push from a server.
+- **Bodyweight per exercise:** `settings.loadPrefs[exId]` is `'bw'` or `'kg'` and overrides the
+  equipment default in `isBodyweight` (set via `setLoadPrefs`, like the registry).
+- **Logging a past workout:** `app.logPast(date)` opens `LogPastSheet`; `pastSession` builds the
+  routine's sets for that day already ticked, then the normal edit screen saves it.
 - **Share links are untrusted input.** Everything in `#routine=` goes through `decodeRoutine`,
   which clamps numbers, whitelists equipment/progressions and drops unknown exercises.
 - **Food values in `js/nutrition.js` are approximate.** They were written from general knowledge,

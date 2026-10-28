@@ -131,6 +131,14 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('pl-') && k !== 'pl-' + VERSION && k !== 'pl-fonts' && k !== 'pl-img').map(k => caches.delete(k)))).then(() => self.clients.claim()))
 })
+// Tapping the rest-over notification brings the app back to the front.
+self.addEventListener('notificationclick', e => {
+  e.notification.close()
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const open = list.find(c => c.url.startsWith(self.registration.scope))
+    return open ? open.focus() : self.clients.openWindow('./')
+  }))
+})
 self.addEventListener('fetch', e => {
   const req = e.request
   if (req.method !== 'GET') return
