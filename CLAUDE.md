@@ -49,6 +49,10 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/exercises.js` | 32 core exercises + catalogue loader + registry of picked exercises |
 | `js/store.js` | Persistence (Claude artifact db or localStorage), backups |
 | `js/chime.js` | Rest sounds queued on the audio clock, rest-over notification (no UI, testable) |
+| `js/social.js` | Crews: what's shared (posts, profile numbers), leaderboard, invite codes (no network) |
+| `js/social-api.js`, `js/social-config.js` | Supabase calls (library loaded on demand) and the project URL + publishable key |
+| `js/ui/crew.js` | Crew tab: email-code sign-in, profile, crews, leaderboard, feed, reactions, auto-push |
+| `supabase/` | `schema.sql` (tables, RLS, crew functions), setup guide, `check-rls.mjs` (PGlite) |
 | `js/water.js` | CapySpa water tracker: drink logs per day, hydration ratios, stages, streak, mood insight |
 | `js/data/catalog.json`, `body.json` | Generated; see `tools/build-data.mjs` and NOTICE.md |
 | `js/data/foods.json` | Generated from FSANZ AFCD Release 3: `[key, name, kcal, p, c, f, fibre g, sodium mg]` |
@@ -62,7 +66,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs test/rest-load.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs test/rest-load.test.mjs test/social.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```
@@ -115,6 +119,15 @@ Data files (only when the sources change):
   equipment default in `isBodyweight` (set via `setLoadPrefs`, like the registry).
 - **Logging a past workout:** `app.logPast(date)` opens `LogPastSheet`; `pastSession` builds the
   routine's sets for that day already ticked, then the normal edit screen saves it.
+- **Crews (Supabase)** are hidden until `js/social-config.js` has a URL and publishable key; see
+  `supabase/README.md`. Privacy is enforced by RLS in `supabase/schema.sql` (only crewmates can read
+  your rows; crews are joined only via `join_crew(code)`). Only `social.js` decides what leaves the
+  phone: never notes, body weight, food, water or photos, and nothing from example data. The
+  Supabase library (`@supabase/supabase-js` pinned, from jsDelivr) loads only when Crew opens or when
+  this phone has signed in before (`pl.crew.auth` in localStorage). After any change to workouts,
+  `autoPush` syncs the profile and the last 14 days of posts (adds, edits, deletes). Run
+  `supabase/check-rls.mjs` after changing the schema. Supabase's built-in email only reaches team
+  members: real sign-ins need custom SMTP.
 - **Share links are untrusted input.** Everything in `#routine=` goes through `decodeRoutine`,
   which clamps numbers, whitelists equipment/progressions and drops unknown exercises.
 - **Food values in `js/nutrition.js` are approximate.** They were written from general knowledge,

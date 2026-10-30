@@ -529,6 +529,29 @@ details summary { cursor: pointer; }
 .src-off { color: var(--orange); background: color-mix(in srgb, var(--orange) 16%, transparent); }
 .src-custom { color: var(--green); background: color-mix(in srgb, var(--green) 16%, transparent); }
 .src-est { color: var(--label-2); background: var(--surface-3); }
+/* Crew */
+.code-input { font-size: 1.3rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+.crew-code { font-size: 1.15rem; letter-spacing: .12em; color: var(--acc); }
+.avatar-pick { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.avatar-opt { font-size: 1.5rem; padding: 6px 0; border-radius: var(--r-sm); background: var(--surface-2); }
+.avatar-opt.on { outline: 2px solid var(--acc); background: color-mix(in srgb, var(--acc) 18%, transparent); }
+.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.board li { display: grid; grid-template-columns: 22px 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 0; }
+.board li + li { border-top: 1px solid var(--label-4); }
+.board li.me .board-main b { color: var(--acc); }
+.board-place { font-weight: 700; color: var(--label-2); text-align: center; }
+.board-avatar { font-size: 1.45rem; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); flex: none; }
+.board-main { display: flex; flex-direction: column; min-width: 0; }
+.board-main b { font-weight: 600; overflow-wrap: anywhere; } .board-main small { color: var(--label-2); font-size: .78rem; }
+.board-val { font-weight: 600; white-space: nowrap; }
+.post { gap: 8px; }
+.post-head { display: flex; gap: 10px; align-items: center; }
+.post-head .row-main { display: flex; flex-direction: column; min-width: 0; } .post-head small { color: var(--label-2); font-size: .8rem; }
+.post-prs { font-size: .88rem; margin: 0; }
+.reacts { display: flex; gap: 8px; flex-wrap: wrap; }
+.react { border-radius: 99px; padding: 6px 12px; background: var(--surface-2); font-size: 1rem; min-height: 36px; }
+.react.on { background: color-mix(in srgb, var(--acc) 22%, transparent); outline: 1.5px solid var(--acc); }
+.react:disabled { opacity: .55; }
 .field-row { display: flex; gap: 8px; } .field-row .input { flex: 1; min-width: 0; }
 .scanner { position: relative; border-radius: var(--r); overflow: hidden; background: #000; }
 .scanner video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }

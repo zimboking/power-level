@@ -13,6 +13,9 @@ import { StatsTab } from './ui/stats-tab.js'
 import { FoodView } from './ui/food.js'
 import { CapySpaView } from './ui/capyspa.js'
 import { SharedRoutineSheet } from './ui/share-sheet.js'
+import { CrewView, autoPush } from './ui/crew.js'
+import { configured as crewsOn } from './social-api.js'
+import { codeFromHash } from './social.js'
 import { capyOn } from './water.js'
 import { Fighter } from './ui/hero.js'
 import { RestTimer, startTimer } from './ui/rest.js'
@@ -29,6 +32,7 @@ const TABS = [
 const MORE = [
   { id: 'stats', label: 'Stats', icon: 'stats', hint: 'Records, muscles, body weight' },
   { id: 'capyspa', label: 'CapySpa', icon: 'drop', hint: 'Water tracker with Capy’s onsen' },
+  ...(crewsOn() ? [{ id: 'crew', label: 'Crew', icon: 'users', hint: 'Your mates’ workouts, PRs and streaks' }] : []),
 ]
 const CAPY_TABS = [TABS[0], TABS[1], TABS[2], TABS[4], { id: 'more', label: 'More', icon: 'more', more: true }]
 
@@ -89,6 +93,20 @@ function App() {
   useEffect(() => { if (capyHidden && tab === 'capyspa') setTab('home') }, [capyHidden, tab])
 
   if (state) { setRegistry(state.profile.exercises); setLoadPrefs(state.profile.settings.loadPrefs) }
+  useEffect(() => { if (state) autoPush(state) }, [state?.workouts, state?.profile.settings.crewPosts, state?.profile.settings.crewLifts])
+  // A crew invite link (#crew=CODE) opens Crew ready to join.
+  useEffect(() => {
+    if (!state || !crewsOn()) return
+    const read = () => {
+      const code = codeFromHash(location.hash)
+      if (!code) return
+      try { history.replaceState(null, '', location.pathname + location.search) } catch { /* ignore */ }
+      setTab('crew'); setTabParam({ join: code })
+    }
+    read()
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [!!state])
   const level = useMemo(() => (state ? powerLevel(state.workouts) : 0), [state?.workouts])
   const tier = tierFor(level)
   const prevTier = useRef(null)
@@ -154,7 +172,7 @@ function App() {
   const tabs = capy ? CAPY_TABS : TABS
   const shown = !capy && tab === 'capyspa' ? 'home' : tab
   const inMore = capy && MORE.some(m => m.id === shown)
-  const View = { home: HomeView, plan: PlanTab, train: WorkoutTab, stats: StatsTab, food: FoodView, capyspa: CapySpaView }[shown] || HomeView
+  const View = { home: HomeView, plan: PlanTab, train: WorkoutTab, stats: StatsTab, food: FoodView, capyspa: CapySpaView, crew: CrewView }[shown] || HomeView
   const inSession = tab === 'train' && state.active
   return html`<div class=${'app' + (inSession || editing ? ' in-session' : '') + (shown === 'capyspa' ? ' capy-tab' : '')}>
     <main class="main">${editing

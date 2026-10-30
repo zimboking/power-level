@@ -15,6 +15,7 @@ import { dailyTargets } from './food.js'
 import { today, isStandalone, makeBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 import { CapyHomeCard } from './capyspa.js'
+import { configured as crewsOn } from '../social-api.js'
 import { capyOn } from '../water.js'
 
 const daysSince = iso => (iso ? Math.floor((Date.now() - new Date(iso + 'T00:00:00')) / 864e5) : Infinity)
@@ -113,6 +114,11 @@ export function HomeView({ app }) {
       <p class="streak-big"><${Icon} name="flame" size=${26} class="flame" /> ${streak} week streak</p>
       <p class="muted">${thisWeek} this week · ${workouts.length} workouts total</p>
     </section>
+    ${crewsOn() && html`<button class="card custom-card" onClick=${() => app.go('crew')}>
+      <span class="today-ic"><${Icon} name="users" /></span>
+      <span class="row-main"><span class="title-3">Crew</span><small>See your mates’ workouts, PRs and streaks, and give them a fist bump.</small></span>
+      <${Icon} name="right" size=${18} />
+    </button>`}
     ${goals.length > 0 && html`<section class="card"><div class="card-head"><p class="card-title">Goals</p><button class="text-btn" onClick=${() => app.go('stats', 'strength')}>All</button></div>
       ${goals.map(g => { const j = journeyFor(g, workouts, profile, today()); const pct = percentThere(g.start, j.current, g.target); return html`<div class="goal-mini">
         <div><b>${exInfo(g.exId).name} → ${g.target} kg</b><span class="muted small">${fmt(j.current)} kg now · ${j.reachable ? 'ETA ' + fmtDate(j.etaDate) : 'long road'}</span></div>
