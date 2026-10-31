@@ -43,9 +43,11 @@ export function restChime(loud, at = 0) {
 // they play on time even when the phone slows the page's timers down (screen off, another app
 // in front). Changing, pausing or skipping the timer calls them off and queues them again.
 let queued = []
+let chimeAt = null // audio-clock time the queued chime starts
 export function cancelRestSounds() {
   for (const o of queued) { try { o.stop(0); o.disconnect() } catch { /* already finished */ } }
   queued = []
+  chimeAt = null
 }
 export function scheduleRestSounds(endsAt, loud, now = Date.now()) {
   cancelRestSounds()
@@ -55,6 +57,20 @@ export function scheduleRestSounds(endsAt, loud, now = Date.now()) {
   if (at <= 0) return false
   for (const s of [3, 2, 1]) if (at - s > 0.05) queued.push(...beep(660, 120, loud, at - s))
   queued.push(...restChime(loud, at))
+  chimeAt = audio.currentTime + at
+  return true
+}
+
+// Back-up for the queued chime, called when the page's own clock reaches zero. Phones can pause
+// the audio clock (power saving, screen off), and then the queued chime is late or never plays.
+// If the audio clock hasn't reached the chime yet, play it now instead. Returns true if it did.
+const ON_TIME = 0.5 // seconds of slack between the page clock and the audio clock
+export function ensureChime(loud) {
+  if (!audio) return false
+  if (audio.state !== 'running') { try { audio.resume().catch(() => {}) } catch { /* old browsers */ } }
+  if (chimeAt != null && audio.state === 'running' && audio.currentTime >= chimeAt - ON_TIME) return false
+  cancelRestSounds()
+  restChime(loud)
   return true
 }
 

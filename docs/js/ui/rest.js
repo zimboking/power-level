@@ -1,7 +1,7 @@
 // Rest countdown. Starts by itself after a set (or by hand), counts down with a ring, beeps
 // for the last 3 seconds and at zero, buzzes the phone, can notify, and can be paused, nudged or expanded.
 import { html, useState, useEffect, useRef } from './core.js'
-import { primeAudio, scheduleRestSounds, cancelRestSounds, notifyRestOver } from '../chime.js'
+import { primeAudio, scheduleRestSounds, cancelRestSounds, ensureChime, notifyRestOver } from '../chime.js'
 
 export { primeAudio, restChime, canNotify } from '../chime.js'
 
@@ -52,6 +52,7 @@ export function RestTimer({ timer, setTimer, sound, loud = true, flash, notify, 
     if (paused || lastBeep.current === left) return
     lastBeep.current = left
     if (left === 0) {
+      if (sound && document.visibilityState === 'visible') ensureChime(loud)
       if (notify && document.visibilityState === 'hidden') notifyRestOver()
       // Android buzzes (iPhones ignore this): long pulses you'll feel through a pocket.
       try { navigator.vibrate?.(loud ? [500, 150, 500, 150, 700] : [250, 120, 250]) } catch { /* no vibration */ }

@@ -99,7 +99,8 @@ export function SettingsSheet({ open, onClose, app }) {
       <${Toggle} id="set-beep" checked=${s.restSound !== false} onChange=${v => set({ restSound: v })} label="Beep when rest ends" />
       ${s.restSound !== false && html`<div class="toggle-row"><span class="row-main"><span>Chime</span><small>Loud cuts through a busy gym and buzzes harder. Turn your phone's volume up too.</small></span>
         <${Segmented} small label="Chime" value=${s.restLoud === false ? 'soft' : 'loud'} onChange=${v => set({ restLoud: v === 'loud' })} options=${[{ value: 'loud', label: 'Loud' }, { value: 'soft', label: 'Soft' }]} /></div>
-        <button class="row-btn" onClick=${() => { primeAudio(); restChime(s.restLoud !== false) }}><span class="row-main"><span>Test the chime</span></span></button>`}
+        <button class="row-btn" onClick=${() => { primeAudio(); restChime(s.restLoud !== false) }}><span class="row-main"><span>Test the chime</span></span></button>
+        <button class="row-btn" onClick=${() => { primeAudio(); app.startRest(5); onClose() }}><span class="row-main"><span>Try a 5-second rest</span><small>Runs the real rest timer, beeps and all</small></span></button>`}
       ${canNotify() && html`<${Toggle} id="set-notify" checked=${!!s.restNotify && notifyState === 'granted'} onChange=${toggleNotify} label="Notify me when rest ends" hint=${NOTIFY_HINT[notifyState] || NOTIFY_HINT.default} />`}
       <div class="toggle-row"><span class="row-main"><span>Week starts on</span></span><${Segmented} small label="Week starts on" value=${plan.weekStart} onChange=${v => app.update(st => ({ ...st, profile: { ...st.profile, plan: { ...plan, weekStart: v } } }), ['profile'])} options=${[{ value: 1, label: 'Monday' }, { value: 0, label: 'Sunday' }]} /></div>
     </div>

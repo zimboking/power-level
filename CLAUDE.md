@@ -112,7 +112,8 @@ Data files (only when the sources change):
   (catalogue cardio, or custom). **Reformer** exercises are no-load (`isBodyweight`); springs go in the note.
 - **Rest sounds** are queued on the Web Audio clock when rest starts (`scheduleRestSounds`) and
   re-queued on any change and when the app comes back to the front, because phones throttle page
-  timers in the background. iPhones still pause web audio when you leave the app; the optional
+  timers in the background. When the page clock hits zero, `ensureChime` plays it right away if the
+  audio clock hasn't reached it (phones pause that clock to save power). iPhones still pause web audio when you leave the app; the optional
   rest-over notification (`settings.restNotify`, shown by the service worker) only helps on
   Android. A real background alert on iPhone needs Web Push from a server.
 - **Bodyweight per exercise:** `settings.loadPrefs[exId]` is `'bw'` or `'kg'` and overrides the
