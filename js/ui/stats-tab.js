@@ -15,6 +15,7 @@ import { activeGoal } from '../plan.js'
 import { shareWorkout } from './share-card.js'
 import { prNamesFor } from '../records.js'
 import { today } from '../store.js'
+import { canResume } from '../resume.js'
 
 function Tile({ icon, label, value, tone }) {
   return html`<div class="tile"><p class="tile-label"><${Icon} name=${icon} size=${15} /> ${label}</p><p class=${'tile-value ' + (tone || '')}>${value}</p></div>`
@@ -102,6 +103,7 @@ function History({ app }) {
       <small>${fmtDateLong(w.date)} · ${w.entries.reduce((n, e) => n + e.sets.filter(s => !s.warmup).length, 0)} sets · ${formatKg(workoutVolume(w))}${w.durationMin ? ` · ${w.durationMin} min` : ''}</small></span><${Icon} name="right" size=${16} /></button>`)}</div>
     ${list.length > limit && html`<button class="btn" onClick=${() => setLimit(limit + 30)}>Show more</button>`}
     <${ActionSheet} open=${!!menu} title=${menu ? `${menu.name} · ${fmtDate(menu.date)}` : ''} onClose=${() => setMenu(null)} actions=${menu ? [
+      canResume(menu, today()) && { label: 'Continue this workout', icon: 'dumbbell', hint: 'Reopen it and keep training', onClick: () => app.resumeWorkout(menu) },
       { label: 'Edit or move date', icon: 'edit', hint: 'Records are re-read from the corrected history', onClick: () => app.editWorkout(menu) },
       { label: 'Repeat this workout', icon: 'copy', onClick: () => app.repeatWorkout(menu) },
       { label: 'Share workout', icon: 'link', hint: 'A picture and summary for the group chat', onClick: async () => { const res = await shareWorkout(menu, { prNames: prNamesFor(app.state.workouts, menu) }); if (res === 'copied') app.toast('Workout copied. Paste it in the group chat.'); else if (res?.text) app.toast('Sharing isn’t available in this browser.') } },

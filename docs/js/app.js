@@ -16,6 +16,7 @@ import { SharedRoutineSheet } from './ui/share-sheet.js'
 import { CrewView, autoPush } from './ui/crew.js'
 import { configured as crewsOn } from './social-api.js'
 import { codeFromHash } from './social.js'
+import { resumeSession } from './resume.js'
 import { capyOn } from './water.js'
 import { Fighter } from './ui/hero.js'
 import { RestTimer, startTimer } from './ui/rest.js'
@@ -153,6 +154,13 @@ function App() {
     openSettings: () => setSettings(true),
     editWorkout: w => setEditing(sessionFromWorkout(w)),
     logPast: (date = addDays(today(), -1)) => setPastDate(date),
+    // Back to a finished workout as a live session (its unticked sets too, if it was the last one).
+    resumeWorkout: w => {
+      if (stateRef.current.active) { setToast({ text: 'Finish or discard the current workout first.' }); return }
+      update(s => ({ ...s, active: resumeSession(w, s.profile.lastFinished), workouts: s.workouts.filter(x => x.id !== w.id), profile: { ...s.profile, lastFinished: null } }), ['profile', 'w:' + w.id])
+      setTab('train')
+      setToast({ text: 'Workout reopened. Pick up where you left off.' })
+    },
     repeatWorkout: w => {
       if (state.active) { setToast({ text: 'Finish or discard the current workout first.' }); return }
       const routine = { id: w.routineId, name: w.name, items: w.entries.map(e => ({ ...(e.cfg || {}), exId: e.exId, sets: e.sets.filter(s => !s.warmup).length, group: e.group ? e.group.replace(/^g-?/, '') : undefined })) }

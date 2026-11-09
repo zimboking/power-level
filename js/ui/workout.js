@@ -13,6 +13,7 @@ import { shareWorkout } from './share-card.js'
 import { FEELINGS, workoutVolume } from '../strength.js'
 import { liftedComparison, formatKg } from '../power.js'
 import { exInfo } from '../exercises.js'
+import { setCounts, lastFinishedFor } from '../resume.js'
 import { plannedFor, nextSession } from '../schedule.js'
 import { uid, today } from '../store.js'
 import { primeAudio } from './rest.js'
@@ -134,7 +135,7 @@ export function ShareWorkoutButton({ app, workout, prNames, label = 'Share worko
     ${fallback && html`<textarea class="input share-text" readonly rows="8" aria-label="Workout summary to copy" onFocus=${e => e.target.select()}>${fallback}</textarea>`}`
 }
 
-function Summary({ app, result, onDone }) {
+function Summary({ app, result, onDone, onResume }) {
   const cmp = liftedComparison(result.volume)
   const times = cmp.times >= 10 ? Math.round(cmp.times) : cmp.times.toFixed(1)
   return html`<div class="stack summary">
@@ -151,6 +152,7 @@ function Summary({ app, result, onDone }) {
     ${result.next && html`<p class="muted center">Next up: <b>${result.next.routine.name}</b> on ${fmtWeekday(result.next.date)}.</p>`}
     <${ShareWorkoutButton} app=${app} workout=${result.workout} prNames=${result.prs.map(p => p.name)} />
     <button class="btn primary big" onClick=${onDone}>Done</button>
+    <button class="btn ghost center-self" onClick=${onResume}>Not finished? Keep going</button>
   </div>`
 }
 
@@ -167,6 +169,7 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
   const [menu, setMenu] = useState(false)
   const [demoMin, setDemoMin] = useState(false)
   const [rename, setRename] = useState(false)
+  const [confirmFinish, setConfirmFinish] = useState(false)
   const entries = session.entries
   const focus = Math.min(session.focus || 0, Math.max(0, entries.length - 1))
   const labels = supersetLabels(entries)
@@ -213,8 +216,9 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
     app.update(s => ({ ...s, profile: storeRoutine(s.profile, existing ? { ...existing, items } : { id: 'r' + uid(), name: session.name, items }) }), ['profile'])
     app.toast(existing ? `Updated routine “${existing.name}”` : 'Saved as a routine')
   }
-  const total = entries.reduce((n, e) => n + e.sets.filter(s => !s.warmup).length, 0)
-  const done = entries.reduce((n, e) => n + e.sets.filter(s => s.done && !s.warmup).length, 0)
+  const { done, total } = setCounts(session)
+  // Finishing a live workout with sets still unticked asks first: they won't be saved.
+  const finish = () => (!session.editing && done < total ? setConfirmFinish(true) : onFinish())
   const card = (e, i) => html`<${ExerciseCard} key=${e.key} entry=${e} index=${i} count=${entries.length} label=${labels[e.key]} app=${app} view=${view}
     onChange=${ne => replace(i, ne)} onSetDone=${onSetDone} onRemove=${() => setEntries(entries.filter((_, j) => j !== i), { focus: Math.max(0, i - 1) })} onMove=${d => move(i, d)}
     isLinked=${!!e.group && entries[i + 1]?.group === e.group} onToggleSuperset=${() => toggleSuperset(i)} onSwap=${() => setPicker({ swap: i })}
@@ -225,7 +229,7 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
       <button class="circle-btn" aria-label=${session.editing ? 'Cancel editing' : 'Back to home'} onClick=${onClose}><${Icon} name=${session.editing ? 'x' : 'down'} /></button>
       <button class="session-title" onClick=${() => setRename(true)}><b>${session.name}</b><span>${session.editing ? fmtWeekday(session.date) + ' · editing' : html`<${Elapsed} since=${session.startedAt} /> · ${done}/${total} sets`}</span></button>
       <button class="circle-btn" aria-label="Workout options" onClick=${() => setMenu(true)}><${Icon} name="more" /></button>
-      <button class="circle-btn go" aria-label=${session.editing ? 'Save changes' : 'Finish workout'} onClick=${onFinish}><${Icon} name="check" /></button>
+      <button class="circle-btn go" aria-label=${session.editing ? 'Save changes' : 'Finish workout'} onClick=${finish}><${Icon} name="check" /></button>
     </header>
     <div class="progress" role="progressbar" aria-valuenow=${done} aria-valuemin="0" aria-valuemax=${total} aria-label="Sets done"><span style=${{ width: (total ? (done / total) * 100 : 0) + '%' }}></span></div>
     ${session.feeling && session.feeling !== 'great' && html`<p class="feeling-note">${FEELINGS[session.feeling].label}: loads eased today.${session.note ? ' “' + session.note + '”' : ''}</p>`}
@@ -241,11 +245,17 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
       ${card(entries[focus], focus)}
       <div class="focus-nav">
         <button class="btn" disabled=${focus === 0} onClick=${() => goTo(focus - 1)}><${Icon} name="left" size=${18} /> Previous</button>
-        ${focus < entries.length - 1 ? html`<button class="btn primary" onClick=${() => goTo(focus + 1)}>Next <${Icon} name="right" size=${18} /></button>` : html`<button class="btn primary" onClick=${onFinish}>${session.editing ? 'Save' : 'Finish'} <${Icon} name="check" size=${18} /></button>`}
+        ${focus < entries.length - 1 ? html`<button class="btn primary" onClick=${() => goTo(focus + 1)}>Next <${Icon} name="right" size=${18} /></button>` : html`<button class="btn primary" onClick=${finish}>${session.editing ? 'Save' : 'Finish'} <${Icon} name="check" size=${18} /></button>`}
       </div>`}
     ${view === 'list' && entries.map(card)}
     <button class="btn wide" onClick=${() => setPicker({})}><${Icon} name="plus" size=${18} /> Add exercise</button>
 
+    <${Sheet} open=${confirmFinish} title="Finish workout?" onClose=${() => setConfirmFinish(false)}>
+      <p>${done === 0 ? html`No sets are ticked yet, so <b>nothing would be saved</b>.` : html`You’ve ticked <b>${done} of ${total}</b> sets. The ${total - done} unticked ${total - done === 1 ? 'set isn’t' : 'sets aren’t'} saved.`}</p>
+      <p class="muted small">Changed your mind later? Reopen it from the summary, or Stats → History today and tomorrow.</p>
+      <button class="btn primary big" onClick=${() => setConfirmFinish(false)}>Keep training</button>
+      <button class="btn" onClick=${() => { setConfirmFinish(false); onFinish() }}>${done === 0 ? 'End without saving' : 'Finish workout'}</button>
+    </${Sheet}>
     <${ActionSheet} open=${menu} title=${session.name} onClose=${() => setMenu(false)} actions=${[
       { label: 'Add exercise', icon: 'plus', onClick: () => setPicker({}) },
       { label: view === 'focus' ? 'Show as list' : 'Guided view', icon: 'list', hint: 'Change the default in Settings', onClick: () => app.setSetting({ view: view === 'focus' ? 'list' : 'focus' }) },
@@ -276,7 +286,7 @@ export function WorkoutTab({ app }) {
   const [chosen, setChosen] = useState(null)
   const [editing, setEditing] = useState(null)
   const openCustom = (opts = { feeling: 'great', note: '', warm: true }) => { setStarting(false); setDraft({ id: 'r' + uid(), name: '', items: [] }); setCustom(opts) }
-  if (result) return html`<${Summary} app=${app} result=${result} onDone=${() => { setResult(null); app.go('home') }} />`
+  if (result) return html`<${Summary} app=${app} result=${result} onDone=${() => { setResult(null); app.go('home') }} onResume=${() => { setResult(null); app.resumeWorkout(result.workout) }} />`
   if (active) {
     const finish = () => {
       const w = toWorkout(active)
@@ -285,7 +295,7 @@ export function WorkoutTab({ app }) {
       const before = app.power.level
       const prs = w.entries.map(e => ({ name: exInfo(e.exId).name, records: recordsBroken(e, entriesFor(workouts, e.exId)) })).filter(p => p.records.length)
       const all = [...workouts, w]
-      app.update(s => ({ ...s, active: null, workouts: [...s.workouts, w] }), ['profile', 'w:' + w.id])
+      app.update(s => ({ ...s, active: null, workouts: [...s.workouts, w], profile: { ...s.profile, lastFinished: lastFinishedFor(active, w.id) } }), ['profile', 'w:' + w.id])
       setResult({ workout: w, volume: workoutVolume(w), sets: w.entries.reduce((n, e) => n + e.sets.filter(x => !x.warmup).length, 0), minutes: w.durationMin, prs, before, after: app.powerAfter(all), next: nextSession(profile, all, w.date) })
     }
     return html`<${SessionScreen} app=${app} session=${active} onChange=${s => app.update(st => ({ ...st, active: s }), ['profile'])}
