@@ -53,6 +53,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/social-api.js`, `js/social-config.js` | Supabase calls (library loaded on demand) and the project URL + publishable key |
 | `js/ui/crew.js` | Crew tab: email-code sign-in, profile, crews, leaderboard, feed, reactions, auto-push |
 | `supabase/` | `schema.sql` (tables, RLS, crew functions), setup guide, `check-rls.mjs` (PGlite) |
+| `js/superset.js` | After a tick: rest length and which superset partner is next (`afterSet`) |
 | `js/resume.js` | Reopening a finished workout (`resumeSession`, `canResume`) and the finish-early set counts |
 | `js/water.js` | CapySpa water tracker: drink logs per day, hydration ratios, stages, streak, mood insight |
 | `js/data/catalog.json`, `body.json` | Generated; see `tools/build-data.mjs` and NOTICE.md |
@@ -67,7 +68,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs test/rest-load.test.mjs test/social.test.mjs test/resume.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs test/rest-load.test.mjs test/social.test.mjs test/resume.test.mjs test/superset.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```

@@ -1,10 +1,11 @@
 // The session screen. Guided (one exercise at a time with its demo) or list view. Used live,
 // and to edit a saved workout or log one you did on paper.
-import { html, useState, useEffect, Icon, Sheet, Field, Chips, Toggle, ActionSheet, fmt, fmtClock, fmtWeekday } from './core.js'
+import { html, useState, useEffect, useRef, Icon, Sheet, Field, Chips, Toggle, ActionSheet, fmt, fmtClock, fmtWeekday } from './core.js'
 import { ExerciseCard } from './exercise-card.js'
 import { LibrarySheet } from './library.js'
 import { RoutineEditor } from './plan-tab.js'
 import { groupRoutines, saveRoutine as storeRoutine } from '../routines.js'
+import { afterSet } from '../superset.js'
 import { buildEntry, DEFAULT_CFG, entriesFor, startCfg } from '../plan.js'
 import { recordsBroken } from '../records.js'
 import { fmtDuration, fmtDistance } from '../duration.js'
@@ -176,7 +177,10 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
   const set = patch => onChange({ ...session, ...patch })
   const setEntries = (list, extra = {}) => set({ entries: list, ...extra })
   const replace = (i, e) => setEntries(entries.map((x, j) => (j === i ? e : x)))
-  const goTo = i => { set({ focus: Math.max(0, Math.min(entries.length - 1, i)) }); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  // Read the latest session, so moving on after a tick (on a timer) doesn't undo the tick.
+  const latest = useRef(session)
+  latest.current = session
+  const goTo = i => { const s = latest.current; onChange({ ...s, focus: Math.max(0, Math.min(s.entries.length - 1, i)) }); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   const move = (i, d) => {
     const j = i + d
     if (j < 0 || j >= entries.length) return
@@ -193,11 +197,10 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
   const onSetDone = (entry, doneSet) => {
     if (session.editing) return
     const i = entries.findIndex(e => e.key === entry.key)
-    const group = entry.group ? entries.map((e, j) => ({ e, j })).filter(x => x.e.group === entry.group) : []
-    const pos = group.findIndex(x => x.j === i)
-    if (group.length > 1 && pos < group.length - 1) { if (view === 'focus') goTo(group[pos + 1].j); return } // superset: straight to the partner
-    if (group.length > 1 && view === 'focus') setTimeout(() => goTo(group[0].j), 300)
-    app.startRest(doneSet.warmup ? 60 : doneSet.rest || entry.cfg.rest || profile.settings.rest || 150)
+    const group = entry.group ? entries.filter(e => e.group === entry.group) : []
+    const { rest, next } = afterSet(entries, i, doneSet, profile.settings.rest || 150)
+    if (next != null && view === 'focus') setTimeout(() => goTo(next), 300)
+    if (rest) app.startRest(rest)
     // `entry` is the state before this tick, so "all done" means at most this one set was left.
     const allDone = !doneSet.warmup && entry.sets.filter(s => !s.warmup && !s.done).length <= 1
     if (view === 'focus' && group.length < 2 && allDone && i < entries.length - 1) setTimeout(() => app.toast({ text: `${exInfo(entry.exId).name} done`, action: { label: 'Next exercise', run: () => goTo(i + 1) } }), 50)
