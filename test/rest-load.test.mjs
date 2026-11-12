@@ -107,3 +107,33 @@ test('any exercise can be switched to bodyweight (no weight) and back', () => {
   setLoadPrefs(undefined)
   assert.equal(isBodyweight(pullup), true)
 })
+
+test('at zero with the audio stopped by another app: wake it, and never play the old chime late', async () => {
+  const { chimeWav } = await import('../js/chime.js')
+  // It wakes up in time: the chime plays through it.
+  const ctx = fakeAudio(); setAudio(ctx)
+  scheduleRestSounds(90_000, true, 0)
+  const queued = ctx.started.length
+  ctx.state = 'interrupted'
+  ctx.resume = () => { ctx.state = 'running'; return Promise.resolve() }
+  assert.equal(ensureChime(true, () => new Promise(() => {})), true)
+  assert.equal(ctx.stopped, queued, 'the queued chime is called off so it cannot ring late')
+  await new Promise(r => setTimeout(r, 0))
+  assert.ok(ctx.started.length > queued, 'chime plays once the context is running')
+  cancelRestSounds(); setAudio(null)
+  // It stays stopped: nothing is queued on it (the <audio> back-up takes over in a browser).
+  const dead = fakeAudio(); setAudio(dead)
+  dead.state = 'interrupted'
+  dead.resume = () => new Promise(() => {})
+  assert.equal(ensureChime(true, () => Promise.resolve()), true)
+  await new Promise(r => setTimeout(r, 0))
+  assert.equal(dead.started.length, 0)
+  cancelRestSounds(); setAudio(null)
+  // The back-up sound is a real WAV with sound in it.
+  const wav = chimeWav(true)
+  assert.equal(String.fromCharCode(...wav.slice(0, 4)), 'RIFF')
+  assert.equal(String.fromCharCode(...wav.slice(8, 12)), 'WAVE')
+  assert.equal(new DataView(wav.buffer).getUint32(40, true), wav.length - 44)
+  assert.ok(new Int16Array(wav.buffer, 44).some(x => Math.abs(x) > 15000))
+  assert.ok(chimeWav(false).length < wav.length)
+})
