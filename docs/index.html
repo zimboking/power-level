@@ -441,6 +441,15 @@ textarea.input { resize: vertical; }
 .wf-table { display: grid; }
 .wf-tr { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr .9fr; gap: 6px; padding: 7px 0; font-size: .86rem; text-align: right; border-top: 1px solid var(--sep); }
 .wf-tr > :first-child { text-align: left; } .wf-tr.head { border-top: 0; font-size: .72rem; color: var(--label-2); }
+.steps-row { display: flex; align-items: flex-end; gap: 14px; } .steps-row .row-main { display: grid; gap: 6px; min-width: 0; }
+.steps-total b { font-size: 1.5rem; } .steps-total small { color: var(--label-2); }
+.steps-row .meter span.done { background: var(--green); }
+.steps-week { display: grid; grid-template-columns: repeat(7, 12px); gap: 5px; height: 62px; flex: none; }
+.steps-day { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; height: 100%; }
+.steps-day i { display: block; width: 100%; border-radius: 4px; background: var(--surface-3); }
+.steps-day.hit i { background: var(--green); } .steps-day.today i { background: var(--acc); }
+.steps-day small { font-size: .62rem; color: var(--label-3); } .steps-day.today small { color: var(--label); font-weight: 700; }
+.steps-help p { margin-top: 6px; }
 .is-dragging { position: relative; z-index: 6; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); transition: none !important; }
 .is-shifting { transition: transform var(--med) var(--ease); }
 .item-row.is-dragging { background: var(--surface-2); }

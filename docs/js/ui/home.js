@@ -15,6 +15,8 @@ import { dailyTargets } from './food.js'
 import { today, isStandalone, makeBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 import { CapyHomeCard } from './capyspa.js'
+import { StepsHomeCard } from './steps.js'
+import { stepsOn } from '../steps.js'
 import { configured as crewsOn } from '../social-api.js'
 import { capyOn } from '../water.js'
 
@@ -129,6 +131,7 @@ export function HomeView({ app }) {
       <div class="macro-bars">${[[unit === 'kj' ? 'Energy' : 'Calories', toUnit(tot.kcal, unit), tgt && toUnit(tgt.kcal, unit), 'kcal'], ['Protein', tot.p, tgt?.protein, 'p'], ['Carbs', tot.c, tgt?.carbs, 'c'], ['Fat', tot.f, tgt?.fat, 'f']].map(([l, v, t, k]) => html`
         <div class="mb"><span>${l}</span><div class=${'meter m-' + k}><span style=${{ width: (t ? Math.min(100, (v / t) * 100) : 0) + '%' }}></span></div><span class="tnum">${Math.round(v)}${t ? ' / ' + t : ''}</span></div>`)}</div>
     </section>
+    ${stepsOn(profile.settings) && html`<${StepsHomeCard} app=${app} />`}
     ${capyOn(profile.settings) && html`<${CapyHomeCard} app=${app} />`}
     <${TierSheet} open=${tiers} onClose=${() => setTiers(false)} level=${app.power.level} />
   </div>`

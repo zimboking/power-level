@@ -6,6 +6,7 @@ import { emptyPlan } from '../schedule.js'
 import { today, isStandalone, makeBackup, parseBackup, downloadFile } from '../store.js'
 import { makeExampleData } from '../examples.js'
 import { capyOn } from '../water.js'
+import { stepsOn } from '../steps.js'
 import { primeAudio, restChime, canNotify } from './rest.js'
 import { POLICIES } from '../progression.js'
 import { DEFAULT_PROGS, defaultProgOf } from '../plan.js'
@@ -107,6 +108,7 @@ export function SettingsSheet({ open, onClose, app }) {
     <p class="section-label">Extras</p>
     <div class="group">
       <${Toggle} id="set-capyspa" checked=${capyOn(s)} onChange=${v => set({ capyspa: v })} label="CapySpa water tracker" hint="Capy’s hot spring fills as you drink. Turning it off hides the tab and the Home card; your water log is kept." />
+      <${Toggle} id="set-steps" checked=${stepsOn(s)} onChange=${v => set({ steps: v })} label="Steps on Home" hint="Type or paste your day’s steps and track them against a goal. Turning it off hides the card; your steps are kept." />
     </div>
     <p class="section-label">Equipment</p>
     <div class="card-flat stack">

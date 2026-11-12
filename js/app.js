@@ -18,6 +18,7 @@ import { configured as crewsOn } from './social-api.js'
 import { codeFromHash } from './social.js'
 import { resumeSession } from './resume.js'
 import { capyOn } from './water.js'
+import { stepsFromHash, setSteps } from './steps.js'
 import { Fighter } from './ui/hero.js'
 import { RestTimer, startTimer } from './ui/rest.js'
 
@@ -95,6 +96,20 @@ function App() {
 
   if (state) { setRegistry(state.profile.exercises); setLoadPrefs(state.profile.settings.loadPrefs) }
   useEffect(() => { if (state) autoPush(state) }, [state?.workouts, state?.profile.settings.crewPosts, state?.profile.settings.crewLifts])
+  // Steps handed over in a link (#steps=12345, optionally &date=YYYY-MM-DD), e.g. from a phone automation.
+  useEffect(() => {
+    if (!state) return
+    const read = () => {
+      const hit = stepsFromHash(location.hash, today())
+      if (!hit) return
+      try { history.replaceState(null, '', location.pathname + location.search) } catch { /* ignore */ }
+      update(s => ({ ...s, profile: { ...s.profile, steps: setSteps(s.profile.steps, hit.date, hit.steps) } }), ['profile'])
+      setToast({ text: `Steps updated: ${hit.steps.toLocaleString('en-AU')}${hit.date === today() ? ' today' : ' on ' + hit.date}` })
+    }
+    read()
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [!!state])
   // A crew invite link (#crew=CODE) opens Crew ready to join.
   useEffect(() => {
     if (!state || !crewsOn()) return
