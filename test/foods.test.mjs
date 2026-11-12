@@ -205,3 +205,28 @@ test('Open Food Facts fibre and sodium: sodium in g becomes mg, salt is used whe
   const c = productToFood(base)
   assert.equal('fib' in c || 'na' in c, false)
 })
+
+test('week summary: blank days are skipped, and the budget covers logged and coming days', async () => {
+  const { weekSummary } = await import('../js/nutrition.js')
+  const dates = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']
+  const e = (kcal, p) => [{ kcal, p, c: 0, f: 0 }]
+  const food = { '2026-11-09': e(2200, 150), '2026-11-11': e(1800, 110), '2026-11-13': e(500, 40) }
+  const tgt = { kcal: 2000, protein: 140, carbs: 200, fat: 70 }
+  const w = weekSummary(food, dates, tgt, '2026-11-13')
+  assert.equal(w.logged, 3)
+  assert.equal(w.toCome, 3) // today, Saturday and Sunday
+  assert.equal(w.stats.kcal.total, 4500)
+  assert.equal(w.stats.kcal.avg, 2000) // Monday and Wednesday; today is still filling up
+  assert.equal(w.avgDays, 2)
+  assert.equal(w.stats.kcal.budget, 10000) // 2 finished days + 3 to come
+  assert.equal(Math.round(w.stats.kcal.perDayLeft), 1833) // (10000 - 4500) / 3; today's 500 already counts
+  assert.equal(weekSummary({ '2026-11-13': e(500, 40) }, dates, tgt, '2026-11-13').stats.kcal.avg, 500)
+  assert.equal(w.stats.p.total, 300)
+  assert.equal(w.days[1].logged, false)
+  assert.equal(w.days[5].future, true)
+  // A finished week has nothing left to spread; no targets means no budget.
+  assert.equal(weekSummary(food, dates, tgt, '2026-11-20').stats.kcal.perDayLeft, null)
+  assert.equal(weekSummary(food, dates, null, '2026-11-13').stats.kcal.budget, null)
+  // Over budget never goes negative.
+  assert.equal(weekSummary({ '2026-11-13': e(99999, 0) }, dates, tgt, '2026-11-13').stats.kcal.perDayLeft, 0)
+})

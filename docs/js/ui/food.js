@@ -1,5 +1,6 @@
 // Food: daily calories and macros against targets worked out from your profile and goal.
-import { html, useState, useEffect, useMemo, Sheet, Field, Chips, fmt, fmtDateLong } from './core.js'
+import { html, useState, useEffect, useMemo, Sheet, Field, Chips, Segmented, fmt, fmtDateLong } from './core.js'
+import { FoodWeek } from './food-week.js'
 import { Ring } from './charts.js'
 import { Scanner, cameraAvailable } from './scanner.js'
 import { targets, macrosFor, sumEntries, energyUnitOf, toUnit, fromUnit, fmtEnergy, ENERGY_UNITS, extraTargets } from '../nutrition.js'
@@ -186,6 +187,7 @@ export function FoodView({ app }) {
   const { profile, food } = app.state
   const [date, setDate] = useState(today())
   const [meal, setMeal] = useState(null)
+  const [span, setSpan] = useState('day')
   const entries = food[date] || []
   const tot = sumEntries(entries)
   const tgt = dailyTargets(profile)
@@ -194,14 +196,19 @@ export function FoodView({ app }) {
   const setDay = list => app.update(s => ({ ...s, food: { ...s.food, [date]: list } }), ['f:' + date])
   const yesterday = food[shiftDate(date, -1)] || []
   const week = Array.from({ length: 7 }, (_, i) => sumEntries(food[shiftDate(date, -i)]).kcal).filter(k => k > 0)
+  const spanPick = html`<${Segmented} small label="Show" value=${span} onChange=${setSpan} options=${[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }]} />`
+  if (span === 'week') return html`<div class="stack">
+    <div class="food-top">${spanPick}<${Chips} small label="Show energy in" value=${unit} onChange=${setUnit} options=${UNIT_OPTS} /></div>
+    <${FoodWeek} food=${food} date=${date} setDate=${setDate} tgt=${tgt} unit=${unit} weekStart=${profile.plan?.weekStart ?? 1} onPickDay=${d => { setDate(d); setSpan('day'); window.scrollTo(0, 0) }} />
+  </div>`
   return html`<div class="stack">
+    <div class="food-top">${spanPick}<${Chips} small label="Show energy in" value=${unit} onChange=${setUnit} options=${UNIT_OPTS} /></div>
     <div class="food-top">
     <div class="date-nav">
       <button class="icon-btn" aria-label="Previous day" onClick=${() => setDate(shiftDate(date, -1))}>‹</button>
       <b>${date === today() ? 'Today' : fmtDateLong(date)}</b>
       <button class="icon-btn" aria-label="Next day" disabled=${date >= today()} onClick=${() => setDate(shiftDate(date, 1))}>›</button>
     </div>
-    <${Chips} small label="Show energy in" value=${unit} onChange=${setUnit} options=${UNIT_OPTS} />
     </div>
     <section class="panel rings">
       <${Ring} className="r-kcal" value=${toUnit(tot.kcal, unit)} target=${tgt && toUnit(tgt.kcal, unit)} label=${unit === 'kj' ? 'Energy (kJ)' : 'Calories'} unit="" />

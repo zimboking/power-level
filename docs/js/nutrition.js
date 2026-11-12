@@ -120,3 +120,34 @@ export const energyUnitOf = settings => (settings?.energy === 'kj' ? 'kj' : 'kca
 export const toUnit = (kcal, unit) => Math.round((Number(kcal) || 0) * (unit === 'kj' ? KJ_PER_KCAL : 1))
 export const fromUnit = (value, unit) => Math.round((Number(value) || 0) / (unit === 'kj' ? KJ_PER_KCAL : 1))
 export const fmtEnergy = (kcal, unit) => `${toUnit(kcal, unit).toLocaleString()} ${ENERGY_UNITS[unit] || 'kcal'}`
+
+const WEEK_KEYS = ['kcal', 'p', 'c', 'f']
+/**
+ * A week of food against daily targets. `dates` are the seven days; `tgt` is { kcal, protein, carbs, fat }
+ * or null. Past days with nothing logged are left out (a blank day is "didn't track", not "ate
+ * nothing"). For each of kcal / p / c / f:
+ *   total      everything logged this week, today included
+ *   avg        per finished day (today is still filling up, so it only counts when it's all there is)
+ *   target     per day
+ *   budget     target × (logged past days + today and the days after it)
+ *   perDayLeft what's left of the budget spread over today and the days after it, never below 0
+ */
+export function weekSummary(food, dates, tgt, todayIso) {
+  const days = dates.map(date => {
+    const entries = food?.[date] || []
+    return { date, ...sumEntries(entries), logged: entries.length > 0, future: date > todayIso, today: date === todayIso }
+  })
+  const logged = days.filter(d => d.logged)
+  const done = logged.filter(d => d.date < todayIso)
+  const avgDays = done.length ? done : logged
+  const toCome = days.filter(d => d.date >= todayIso).length
+  const target = tgt ? { kcal: tgt.kcal, p: tgt.protein, c: tgt.carbs, f: tgt.fat } : null
+  const sum = (list, k) => list.reduce((s, d) => s + d[k], 0)
+  const stats = Object.fromEntries(WEEK_KEYS.map(k => {
+    const total = sum(logged, k)
+    const t = target?.[k] || null
+    const budget = t ? t * (done.length + toCome) : null
+    return [k, { total, avg: avgDays.length ? sum(avgDays, k) / avgDays.length : 0, target: t, budget, perDayLeft: t && toCome ? Math.max(0, (budget - total) / toCome) : null }]
+  }))
+  return { days, logged: logged.length, avgDays: avgDays.length, toCome, stats }
+}

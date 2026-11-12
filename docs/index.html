@@ -519,6 +519,23 @@ details summary { cursor: pointer; }
 .plan-table tr.deload td { color: var(--label-2); } .plan-table tr.test td { color: var(--green); font-weight: 600; }
 
 /* Food */
+.fw-chart { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; height: 170px; }
+.fw-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; height: 100%; }
+.fw-col:disabled { opacity: .45; }
+.fw-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 8px; overflow: hidden; }
+.fw-bar { display: block; width: 100%; background: var(--acc); border-radius: 8px 8px 0 0; transition: height .5s var(--ease); }
+.fw-col.over .fw-bar { background: var(--orange); }
+.fw-col small { height: 18px; font-size: .7rem; color: var(--label-2); } .fw-col.today small { color: var(--acc); font-weight: 700; }
+.fw-target { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--label-3); pointer-events: none; z-index: 1; }
+.fw-target em { position: absolute; right: 0; bottom: 2px; font-style: normal; font-size: .66rem; color: var(--label-2); background: var(--surface); padding: 0 4px; border-radius: 4px; }
+.fw-row { display: grid; gap: 2px; } .fw-row small { padding-left: 84px; font-size: .74rem; }
+.meter span.over { background: var(--orange); }
+.m-kcal span { background: var(--acc); } .m-p span { background: var(--m-p); } .m-c span { background: var(--m-c); } .m-f span { background: var(--m-f); }
+.fw-table { display: grid; }
+.fw-tr { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 6px; align-items: center; padding: 9px 2px; text-align: right; font-size: .88rem; border-top: 1px solid var(--sep); }
+.fw-tr > :first-child { text-align: left; font-weight: 600; } .fw-tr.head { border-top: 0; font-size: .72rem; color: var(--label-2); padding: 2px; }
+.fw-tr.today > :first-child { color: var(--acc); } .fw-none { grid-column: 2 / -1; font-size: .8rem; }
+.food-top .seg { flex: 0 0 150px; }
 .food-top { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .food-top .date-nav { flex: 1; min-width: 220px; }
 .date-nav { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border-radius: 99px; padding: 2px; }
