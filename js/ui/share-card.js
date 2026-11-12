@@ -7,16 +7,16 @@ import { exInfo } from '../exercises.js'
 import { liftedSvg } from './lifted-art.js'
 
 const W = 1080, H = 1350, PAD = 72
-const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif'
+export const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif'
 
-const loadSvg = svg => new Promise((resolve, reject) => {
+export const loadSvg = svg => new Promise((resolve, reject) => {
   const img = new Image()
   img.onload = () => resolve(img)
   img.onerror = reject
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
 })
 
-function fit(ctx, text, max) {
+export function fit(ctx, text, max) {
   if (ctx.measureText(text).width <= max) return text
   let t = text
   while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1)
@@ -77,7 +77,7 @@ export async function workoutCard(w, { prNames = [] } = {}) {
   return new Promise((resolve, reject) => c.toBlob(b => (b ? resolve(b) : reject(new Error('encode'))), 'image/png'))
 }
 
-function roundRect(ctx, x, y, w, h, r) {
+export function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath()
   ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r)
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath()
@@ -101,4 +101,21 @@ export async function shareWorkout(w, { prNames = [] } = {}) {
     }
   } catch (e) { if (e?.name === 'AbortError') return 'cancelled' }
   try { await navigator.clipboard.writeText(text); return 'copied' } catch { return { text } }
+}
+
+/**
+ * Shares a picture made by `makeBlob` with some text: picture + text where the phone allows it,
+ * else text, else copies the text. Returns 'shared' | 'copied' | 'cancelled' | 'failed'.
+ */
+export async function shareImage(makeBlob, filename, title, text) {
+  try {
+    if (navigator.share) {
+      let file = null
+      try { file = new File([await makeBlob()], filename, { type: 'image/png' }) } catch { file = null }
+      if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title, text })
+      else await navigator.share({ title, text })
+      return 'shared'
+    }
+  } catch (e) { if (e?.name === 'AbortError') return 'cancelled' }
+  try { await navigator.clipboard.writeText(text); return 'copied' } catch { return 'failed' }
 }

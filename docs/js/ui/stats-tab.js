@@ -15,6 +15,9 @@ import { activeGoal } from '../plan.js'
 import { shareWorkout } from './share-card.js'
 import { prNamesFor } from '../records.js'
 import { today } from '../store.js'
+import { RecapCard } from './recap.js'
+import { LIFT_METRICS, liftSeries, seriesChange, weightVsFood } from '../progress.js'
+import { energyUnitOf, toUnit, fmtEnergy } from '../nutrition.js'
 import { canResume } from '../resume.js'
 
 function Tile({ icon, label, value, tone }) {
@@ -60,24 +63,55 @@ function MuscleSection({ workouts, sex }) {
 function StrengthSection({ workouts, profile }) {
   const used = useMemo(() => [...new Set(workouts.flatMap(w => w.entries.map(e => e.exId)))].filter(id => exerciseHistory(workouts, id).length), [workouts])
   const [exId, setExId] = useState(used.includes('bench') ? 'bench' : used[0])
-  const hist = useMemo(() => (exId ? exerciseHistory(workouts, exId) : []), [workouts, exId])
-  const avg = rollingAverage(hist.map(p => p.e1rm), 4)
+  const [metric, setMetric] = useState('e1rm')
+  const [range, setRange] = useState('all')
+  const since = { '3m': addDays(today(), -91), '6m': addDays(today(), -182), '1y': addDays(today(), -365), all: null }[range]
+  const hist = useMemo(() => (exId ? liftSeries(workouts, exId, metric, since) : []), [workouts, exId, metric, since])
+  const avg = rollingAverage(hist.map(p => p.y), 4)
+  const change = seriesChange(hist)
+  const mLabel = LIFT_METRICS.find(m => m.value === metric).label
   const bal = balance(workouts)
   if (!used.length) return null
   const goal = activeGoal(profile, exId)
-  const best = hist.reduce((m, p) => (p.e1rm > (m?.e1rm || 0) ? p : m), null)
+  const best = hist.reduce((m, p) => (p.y > (m?.y || 0) ? p : m), null)
   return html`<div class="card">
-    <div class="card-head"><p class="card-title">Estimated 1RM</p>
+    <div class="card-head"><p class="card-title">Lift progress</p>
       <select id="stat-ex" class="input select" aria-label="Exercise" value=${exId} onChange=${e => setExId(e.target.value)}>${used.map(id => html`<option value=${id}>${exInfo(id).name}</option>`)}</select></div>
-    ${hist.length > 0 && html`<${LineChart} label=${'Estimated 1RM for ' + exInfo(exId).name} goal=${goal?.target} series=${[
-      { className: 's-raw', dots: true, points: hist.map(p => ({ x: p.date, y: p.e1rm, flag: p.feeling !== 'great' })) },
+    <${Segmented} small label="What to chart" value=${metric} onChange=${setMetric} options=${LIFT_METRICS} />
+    <${Segmented} small label="Range" value=${range} onChange=${setRange} options=${[{ value: '3m', label: '3 mo' }, { value: '6m', label: '6 mo' }, { value: '1y', label: '1 yr' }, { value: 'all', label: 'All' }]} />
+    ${hist.length === 0 && html`<p class="muted small">No sessions for this lift in that range.</p>`}
+    ${hist.length > 0 && html`<${LineChart} label=${mLabel + ' for ' + exInfo(exId).name} goal=${metric === 'e1rm' ? goal?.target : null} series=${[
+      { className: 's-raw', dots: true, points: hist.map(p => ({ x: p.date, y: p.y, flag: p.flag })) },
       { className: 's-avg', area: true, points: hist.map((p, i) => ({ x: p.date, y: avg[i] })) },
     ]} />
     <p class="legend"><span class="lg raw"></span>Session <span class="lg avg"></span>4-session average <span class="lg flag"></span>Not 100 %</p>
-    <div class="kv"><span>Best</span><b>${fmt(best.e1rm)} kg · ${fmtDate(best.date)}</b><span>Now (average)</span><b>${fmt(avg[avg.length - 1])} kg</b></div>`}
+    <div class="kv"><span>Best</span><b>${fmt(Math.round(best.y * 10) / 10)} kg · ${fmtDate(best.date)}</b><span>Now (average)</span><b>${fmt(Math.round(avg[avg.length - 1] * 10) / 10)} kg</b>
+      ${change && html`<span>Change over ${hist.length} sessions</span><b>${change.change > 0 ? '+' : ''}${fmt(Math.round(change.change * 10) / 10)} kg (${change.pct > 0 ? '+' : ''}${Math.round(change.pct)}%)</b>`}</div>
+    <p class="muted small">${metric === 'e1rm' ? 'Estimated one-rep max from your best set each session.' : metric === 'top' ? 'The heaviest working set each session.' : 'Weight × reps over the working sets each session.'}</p>`}
     ${bal && html`<div class="divider"></div><p class="card-title">Strength balance <span class="muted">rule-of-thumb ratios</span></p>
       ${bal.map(b => html`<div class="bal-row"><span>${exInfo(b.exId).name}</span><div class="bal-bar"><span class=${'bal-fill ' + b.status} style=${{ width: Math.min(100, b.pct) + '%' }}></span></div><span class="tnum">${b.pct}%</span></div>`)}
       <p class="muted small">Each lift against what your strongest lift suggests it could be (squat 100 : deadlift 120 : bench 75 : row 60 : press 47). The shortest bar is usually the best one to bring up.</p>`}
+  </div>`
+}
+
+// Body weight next to what you ate, week by week. The maintenance figure is a rule-of-thumb estimate.
+function WeightFood({ profile, food, weekStart }) {
+  const unit = energyUnitOf(profile.settings)
+  const { rows, summary } = useMemo(() => weightVsFood(profile.weighins || [], food, today(), 8, weekStart), [profile.weighins, food, weekStart])
+  const kgRows = rows.filter(r => r.kg != null), foodRows = rows.filter(r => r.kcal != null)
+  const u = unit === 'kj' ? 'kJ' : 'kcal'
+  return html`<div class="card"><p class="card-title">Weight against food <span class="muted">last 8 weeks</span></p>
+    ${kgRows.length < 2 && foodRows.length < 2 ? html`<p class="muted small">Weigh in and log food for a couple of weeks and this shows how your weight moves with what you eat. A week needs 4 logged days of food to count.</p>` : html`
+      ${kgRows.length > 1 && html`<p class="chart-cap">Average weight each week</p><${LineChart} height=${150} label="Average body weight each week" series=${[{ className: 's-avg', area: true, dots: true, points: kgRows.map(r => ({ x: r.start, y: Math.round(r.kg * 10) / 10 })) }]} />`}
+      <p class="chart-cap">Average energy a day</p>
+      <${Bars} height=${120} unit=${u} label=${'Average energy a day, by week, in ' + u} data=${rows.map(r => ({ label: fmtDate(r.start), y: r.kcal == null ? 0 : toUnit(r.kcal, unit) }))} />
+      <div class="wf-table"><div class="wf-tr head"><span>Week of</span><span>Weight</span><span>${u} / day</span><span>Protein</span></div>
+        ${[...rows].reverse().map(r => html`<div class="wf-tr"><span>${fmtDate(r.start)}</span><span class="tnum">${r.kg == null ? '–' : fmt(Math.round(r.kg * 10) / 10) + ' kg'}</span>
+          <span class="tnum">${r.kcal == null ? (r.days ? `${r.days} of 7 days` : '–') : toUnit(r.kcal, unit).toLocaleString()}</span><span class="tnum">${r.p == null ? '–' : Math.round(r.p) + ' g'}</span></div>`)}</div>
+      ${summary ? html`<p class="small">Over ${summary.weeks} weeks you ate about <b>${fmtEnergy(summary.kcal, unit)}</b> a day and your weight moved <b>${summary.kgPerWeek > 0 ? '+' : ''}${fmt(Math.round(summary.kgPerWeek * 100) / 100)} kg a week</b>.
+        That points to a maintenance of roughly <b>${fmtEnergy(Math.round(summary.maintenance / 50) * 50, unit)}</b> a day.</p>
+        <p class="muted small">A rough estimate from the 7,700 kcal per kg rule of thumb. Water, salt and missed food logs all move it, so treat it as a guide, not a measurement.</p>`
+        : html`<p class="muted small">The maintenance estimate appears once 3 weeks have both a weigh-in and at least 4 logged days of food.</p>`}`}
   </div>`
 }
 
@@ -136,6 +170,7 @@ export function StatsTab({ app, initial }) {
         <${Tile} icon="scale" label="Weight 30d" value=${delta == null ? '–' : `${delta > 0 ? '+' : ''}${fmt(delta)} kg`} tone=${delta == null ? '' : delta < 0 ? 'good' : 'warm'} />
       </div>
       ${workouts.length === 0 ? html`<${Empty} title="No workouts yet" icon="stats">Finish a workout and your activity, muscle map and records show up here.</${Empty}>` : html`
+        <${RecapCard} app=${app} />
         <${Heatmap} workouts=${workouts} weekStart=${ws} />
         <${MuscleSection} workouts=${workouts} sex=${profile.settings.sex} />
         <div class="card"><p class="card-title">Weekly volume</p><${Bars} data=${weeks} label="Weekly volume in kilograms" /></div>
@@ -149,6 +184,7 @@ export function StatsTab({ app, initial }) {
           { className: 's-raw', dots: true, points: weigh.map(w => ({ x: w.date, y: w.kg })) },
         ]} /><p class="legend"><span class="lg raw"></span>Weigh-ins <span class="lg avg"></span>7-entry trend</p>` : html`<p class="muted small">Log your weight on the Home screen. Two weigh-ins and the chart appears.</p>`}
       </div>
+      <${WeightFood} profile=${profile} food=${app.state.food || {}} weekStart=${ws} />
       <div class="card"><p class="card-title">Progress photos</p><${Photos} /></div>`}
   </div>`
 }
