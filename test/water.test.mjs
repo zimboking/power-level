@@ -153,3 +153,27 @@ test('backups carry the CapySpa log, and older backups without one leave it alon
   const junk = parseBackup(JSON.stringify({ profile: {}, workouts: [], water: { [TODAY]: { logs: 'nope' }, x: null } }))
   assert.deepEqual(junk.water, {})
 })
+
+test('your own drinks: tidy names, no duplicates, hidden ones keep their logs readable', async () => {
+  const w = await import('../js/water.js')
+  assert.equal(w.makeDrink('c:1', { label: '   ' }), null)
+  const shake = w.makeDrink('c:1', { label: '  Protein   shake ', emoji: '🥛', ratio: 9 })
+  assert.deepEqual(shake, { id: 'c:1', label: 'Protein shake', emoji: '🥛', ratio: w.RATIO_MAX })
+  assert.equal(w.makeDrink('c:2', { label: 'x', emoji: '<b>' }).emoji, w.CUSTOM_EMOJI[0])
+  const { list } = w.saveDrink([], shake)
+  assert.equal(w.saveDrink(list, w.makeDrink('c:2', { label: 'protein SHAKE' })).error !== null, true)
+  assert.equal(w.saveDrink(list, w.makeDrink('c:2', { label: 'Coffee' })).error !== null, true)
+  // Renaming the same drink is fine.
+  assert.equal(w.saveDrink(list, { ...shake, label: 'Whey' }).list[0].label, 'Whey')
+  const settings = { capyDrinks: list, capyRatios: { coffee: 0.9 } }
+  assert.deepEqual(w.typeOrderOf(settings), ['water', 'tea', 'coffee', 'juice', 'c:1'])
+  assert.equal(w.ratiosOf(settings)['c:1'], w.RATIO_MAX)
+  assert.equal(w.ratiosOf(settings).coffee, 0.9)
+  assert.equal(w.netOf({ type: 'c:1', volume: 200 }, w.ratiosOf(settings)), 300)
+  const hidden = { capyDrinks: w.hideDrink(list, 'c:1') }
+  assert.deepEqual(w.typeOrderOf(hidden), ['water', 'tea', 'coffee', 'juice'])
+  assert.equal(w.drinkName({ type: 'c:1' }, w.beveragesOf(hidden)), 'Protein shake')
+  assert.equal(w.bevOf(w.beveragesOf({}), 'c:gone').label, 'Drink')
+  assert.equal(w.bevClass('c:1'), 'bev-custom')
+  assert.equal(w.breakdown([{ type: 'c:1', volume: 200 }])['c:1'], 200)
+})

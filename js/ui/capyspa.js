@@ -5,7 +5,8 @@ import { html, useState, useEffect, useMemo, useRef, Sheet, Icon, PageHead, Segm
 import { OnsenScene, CapyRing } from './onsen.js'
 import { CapyStats } from './capy-stats.js'
 import {
-  BEVERAGES, TYPE_ORDER, QUICK_ADDS, STAGES, DEFAULT_RATIOS, RATIO_MIN, RATIO_MAX, GOAL_MIN, GOAL_MAX,
+  TYPE_ORDER, QUICK_ADDS, STAGES, DEFAULT_RATIOS, RATIO_MIN, RATIO_MAX, GOAL_MIN, GOAL_MAX,
+  CUSTOM_EMOJI, DRINK_NAME_MAX, beveragesOf, typeOrderOf, bevOf, bevClass, isCustomType, makeDrink, saveDrink, hideDrink,
   ratiosOf, goalOf, netOf, logsOf, pctOf, stageFor, clamp, drinkName, nextUnlock, streak,
   addLog, removeLog, updateLog, setMood, dateOf, toHHMM, tsFromHHMM,
 } from '../water.js'
@@ -20,13 +21,16 @@ export function useCapy(app) {
   const { water = {}, profile } = app.state
   const s = profile.settings
   const ratios = ratiosOf(s), goal = goalOf(s), date = today()
+  const bevs = beveragesOf(s), types = typeOrderOf(s)
+  const bev = type => bevOf(bevs, type)
+  const name = log => drinkName(log, bevs)
   const logs = logsOf(water, date)
   const total = logs.reduce((n, l) => n + netOf(l, ratios), 0)
   const pct = pctOf(total, goal)
   const save = (fn, dates) => app.update(st => ({ ...st, water: fn(st.water || {}) }), dates.map(d => 'h:' + d))
 
-  const add = (type, volume, ts = Date.now(), name) => {
-    const entry = { id: uid(), type, volume, ts, ...(name ? { name } : {}) }
+  const add = (type, volume, ts = Date.now(), label) => {
+    const entry = { id: uid(), type, volume, ts, ...(label ? { name: label } : {}) }
     save(w => addLog(w, entry).water, [dateOf(ts)])
     const net = netOf(entry, ratios)
     const onToday = dateOf(ts) === date
@@ -34,36 +38,79 @@ export function useCapy(app) {
     let sub = onToday ? `${pctOf(after, goal)}% of goal` : 'logged for yesterday'
     if (onToday && total < goal && after >= goal) sub = 'Goal reached! Full zen 🔥'
     else if (onToday && stageFor(pctOf(after, goal)) > stageFor(pct)) { const st = STAGES[stageFor(pctOf(after, goal))]; sub = `Unlocked ${st.emoji} ${st.name}!` }
-    app.toast({ text: `+${volume} ml ${drinkName(entry)} ${BEVERAGES[type].emoji} · ${sub}`, action: { label: 'Undo', run: () => save(w => removeLog(w, entry.id).water, [dateOf(ts)]) } })
+    app.toast({ text: `+${volume} ml ${name(entry)} ${bev(type).emoji} · ${sub}`, action: { label: 'Undo', run: () => save(w => removeLog(w, entry.id).water, [dateOf(ts)]) } })
   }
   const remove = id => {
     const { log, date: d } = removeLog(app.state.water || {}, id)
     if (!log) return
     save(w => removeLog(w, id).water, [d])
-    app.toast({ text: `Deleted ${log.volume} ml ${drinkName(log)}`, action: { label: 'Undo', run: () => save(w => (removeLog(w, id).log ? w : addLog(w, log).water), [d]) } })
+    app.toast({ text: `Deleted ${log.volume} ml ${name(log)}`, action: { label: 'Undo', run: () => save(w => (removeLog(w, id).log ? w : addLog(w, log).water), [d]) } })
   }
   const change = (id, patch) => {
     const { dates } = updateLog(app.state.water || {}, id, patch)
     save(w => updateLog(w, id, patch).water, dates)
-    app.toast(`Updated: ${patch.volume} ml ${drinkName(patch)} at ${timeLabel(patch.ts)}`)
+    app.toast(`Updated: ${patch.volume} ml ${name(patch)} at ${timeLabel(patch.ts)}`)
   }
   return {
-    ratios, goal, date, logs, total, pct, stage: stageFor(pct),
+    ratios, goal, date, logs, total, pct, stage: stageFor(pct), bevs, types, bev, name,
+    /** Add or change one of your own drinks. Returns { id, error }. */
+    saveDrink: (id, fields) => {
+      const drink = makeDrink(id || 'c:' + uid(), fields)
+      if (!drink) return { id: null, error: 'Give your drink a name.' }
+      const { list, error } = saveDrink(s.capyDrinks, drink)
+      if (error) return { id: null, error }
+      app.setSetting({ capyDrinks: list })
+      return { id: drink.id, error: null }
+    },
+    deleteDrink: id => { app.setSetting({ capyDrinks: hideDrink(s.capyDrinks, id) }); app.toast('Drink removed. Sips you already logged stay.') },
+    drinkOf: id => (s.capyDrinks || []).find(d => d.id === id) || null,
     streak: streak(water, ratios, goal, date),
     mood: water[date]?.mood || null,
     add, remove, change,
     pickMood: m => save(w => setMood(w, date, m), [date]),
-    setRatio: (t, r) => app.setSetting({ capyRatios: { ...ratios, [t]: r } }),
+    setRatio: (t, r) => (isCustomType(t)
+      ? app.setSetting({ capyDrinks: (s.capyDrinks || []).map(d => (d.id === t ? { ...d, ratio: r } : d)) })
+      : app.setSetting({ capyRatios: { ...(s.capyRatios || {}), [t]: r } })),
     resetRatios: () => app.setSetting({ capyRatios: { ...DEFAULT_RATIOS } }),
     setGoal: g => app.setSetting({ waterGoal: clamp(g, GOAL_MIN, GOAL_MAX) }),
   }
 }
 
-export const BevBadge = ({ type, small }) => html`<span class=${'bev-badge bev-' + type + (small ? ' sm' : '')} aria-hidden="true">${BEVERAGES[type].emoji}</span>`
+export const BevBadge = ({ type, small, capy }) => html`<span class=${'bev-badge ' + bevClass(type) + (small ? ' sm' : '')} aria-hidden="true">${capy.bev(type).emoji}</span>`
 
-function TypePicker({ value, onChange, ratios }) {
-  return html`<div class="cs-types" role="radiogroup" aria-label="Drink">${TYPE_ORDER.map(t => html`<button type="button" role="radio" aria-checked=${value === t}
-    class=${'cs-type' + (value === t ? ' on' : '')} onClick=${() => onChange(t)}><span class="cs-emoji">${BEVERAGES[t].emoji}</span><b>${BEVERAGES[t].label}</b><small>×${ratios[t].toFixed(2)}</small></button>`)}</div>`
+/** Drink tiles: the built-in four, your own, and a tile to make a new one. */
+function TypePicker({ value, onChange, capy, onNew }) {
+  const types = capy.types.includes(value) ? capy.types : [...capy.types, value]
+  return html`<div class="cs-types" role="radiogroup" aria-label="Drink">${types.map(t => html`<button type="button" role="radio" aria-checked=${value === t}
+    class=${'cs-type' + (value === t ? ' on' : '')} onClick=${() => onChange(t)}><span class="cs-emoji">${capy.bev(t).emoji}</span><b>${capy.bev(t).label}</b><small>×${(capy.ratios[t] ?? 1).toFixed(2)}</small></button>`)}
+    ${onNew && html`<button type="button" class="cs-type cs-type-new" onClick=${onNew}><span class="cs-plus"><${Icon} name="plus" size=${16} /></span><b>New drink</b><small>your own</small></button>`}</div>`
+}
+
+/** Name, picture and ratio for one of your own drinks. `drink` is null for a new one. */
+function DrinkForm({ drink, capy, onSaved, onCancel }) {
+  const [label, setLabel] = useState(drink?.label || '')
+  const [emoji, setEmoji] = useState(drink?.emoji || CUSTOM_EMOJI[0])
+  const [ratio, setRatio] = useState(drink?.ratio ?? 1)
+  const [error, setError] = useState(null)
+  const step = d => setRatio(r => Math.round(clamp(r + d, RATIO_MIN, RATIO_MAX) * 100) / 100)
+  const submit = e => {
+    e.preventDefault()
+    const res = capy.saveDrink(drink?.id, { label, emoji, ratio })
+    if (res.error) setError(res.error); else onSaved(res.id)
+  }
+  return html`<form class="stack cs-drink-form" onSubmit=${submit}>
+    <label class="field"><span class="field-label">Name</span>
+      <input class="input" id="cs-drink-name" value=${label} maxlength=${DRINK_NAME_MAX} placeholder="Protein shake, kombucha, milk…" autocomplete="off"
+        onInput=${e => { setLabel(e.target.value); setError(null) }} /></label>
+    ${error && html`<p class="small warn" role="alert">${error}</p>`}
+    <div class="cs-emoji-grid" role="radiogroup" aria-label="Picture">${CUSTOM_EMOJI.map(em => html`<button type="button" role="radio" aria-checked=${emoji === em} aria-label=${em}
+      class=${'cs-emoji-btn' + (emoji === em ? ' on' : '')} onClick=${() => setEmoji(em)}>${em}</button>`)}</div>
+    <div class="cs-goal-row"><span class="row-main"><span>Hydration ratio</span><small>250 ml counts as ${Math.round(250 * ratio)} ml. Leave at 1.00 if unsure.</small></span>
+      <div class="cs-ratio"><button type="button" class="circle-btn" aria-label="Lower ratio" disabled=${ratio <= RATIO_MIN} onClick=${() => step(-0.05)}>−</button>
+        <b class="tnum">×${ratio.toFixed(2)}</b><button type="button" class="circle-btn" aria-label="Raise ratio" disabled=${ratio >= RATIO_MAX} onClick=${() => step(0.05)}>+</button></div></div>
+    <div class="row-btns">${drink && html`<button type="button" class="btn danger-text" onClick=${() => { capy.deleteDrink(drink.id); onCancel() }}>Delete</button>`}<span class="right"></span>
+      <button type="button" class="btn" onClick=${onCancel}>Cancel</button><button type="submit" class="btn primary cs-go">${drink ? 'Save' : 'Add drink'}</button></div>
+  </form>`
 }
 
 function VolumeControl({ value, onChange }) {
@@ -79,15 +126,20 @@ function CustomSheet({ open, onClose, capy }) {
   const [type, setType] = useState('water')
   const [volume, setVolume] = useState(350)
   const [time, setTime] = useState(() => toHHMM(Date.now()))
-  useEffect(() => { if (open) setTime(toHHMM(Date.now())) }, [open])
-  const net = Math.round(volume * capy.ratios[type])
+  const [making, setMaking] = useState(false)
+  useEffect(() => { if (open) { setTime(toHHMM(Date.now())); setMaking(false) } }, [open])
+  useEffect(() => { if (!capy.types.includes(type)) setType('water') }, [capy.types.join()])
+  const net = Math.round(volume * (capy.ratios[type] ?? 1))
+  if (making) return html`<${Sheet} open=${open} title="New drink" onClose=${onClose}>
+    <${DrinkForm} drink=${null} capy=${capy} onSaved=${id => { setType(id); setMaking(false) }} onCancel=${() => setMaking(false)} />
+  </${Sheet}>`
   return html`<${Sheet} open=${open} title="Custom sip" onClose=${onClose}>
-    <${TypePicker} value=${type} onChange=${setType} ratios=${capy.ratios} />
+    <${TypePicker} value=${type} onChange=${setType} capy=${capy} onNew=${() => setMaking(true)} />
     <${VolumeControl} value=${volume} onChange=${setVolume} />
     <div class="chips chips-sm">${[100, 200, 250, 330, 500, 750].map(v => html`<button type="button" class=${'chip' + (volume === v ? ' on' : '')} onClick=${() => setVolume(v)}>${v} ml</button>`)}</div>
     <div class="cs-time-row"><label><${Icon} name="timer" size=${18} /><input id="cs-time" type="time" class="input" value=${time} onInput=${e => setTime(e.target.value)} aria-label="Time" /></label>
       <span class="muted small">Net <b class="tnum">${net} ml</b></span></div>
-    <button class="btn primary big cs-go" onClick=${() => { capy.add(type, volume, tsFromHHMM(time, capy.date)); onClose() }}>Add ${volume} ml ${BEVERAGES[type].label}</button>
+    <button class="btn primary big cs-go" onClick=${() => { capy.add(type, volume, tsFromHHMM(time, capy.date)); onClose() }}>Add ${volume} ml ${capy.bev(type).label}</button>
   </${Sheet}>`
 }
 
@@ -168,17 +220,17 @@ function LogRow({ log, capy, editing, onEdit, onDone }) {
     <div class="set-swipe">
       <div class="swipe-bg" aria-hidden="true"><span class="sw-copy"><${Icon} name="edit" size=${18} /> Edit</span><span class="sw-del">Delete <${Icon} name="trash" size=${18} /></span></div>
       <div class="cs-log-row" style=${dx && !editing ? { transform: `translateX(${dx}px)` } : null} ...${editing ? {} : handlers}>
-        <${BevBadge} type=${log.type} />
-        <div class="row-main"><span class="cs-log-top"><b>${drinkName(log)}</b><b class="tnum">${log.volume} ml</b></span>
+        <${BevBadge} type=${log.type} capy=${capy} />
+        <div class="row-main"><span class="cs-log-top"><b>${capy.name(log)}</b><b class="tnum">${log.volume} ml</b></span>
           <small class="cs-log-top">${timeLabel(log.ts)} · ×${r.toFixed(2)}<span><b class="cs-net tnum">${netOf(log, capy.ratios)} ml</b> net</span></small></div>
-        ${!editing && html`<button class="icon-btn" aria-label=${`Edit ${drinkName(log)} at ${timeLabel(log.ts)}`} onClick=${onEdit}><${Icon} name="edit" size=${18} /></button>`}
+        ${!editing && html`<button class="icon-btn" aria-label=${`Edit ${capy.name(log)} at ${timeLabel(log.ts)}`} onClick=${onEdit}><${Icon} name="edit" size=${18} /></button>`}
       </div>
     </div>
     ${editing && draft && html`<div class="cs-edit">
-      <${TypePicker} value=${draft.type} onChange=${type => setDraft({ ...draft, type })} ratios=${capy.ratios} />
+      <${TypePicker} value=${draft.type} onChange=${type => setDraft({ ...draft, type })} capy=${capy} />
       <${VolumeControl} value=${draft.volume} onChange=${volume => setDraft({ ...draft, volume })} />
       <div class="cs-time-row"><label><${Icon} name="timer" size=${18} /><input type="time" class="input" value=${draft.time} aria-label="Time" onInput=${e => setDraft({ ...draft, time: e.target.value })} /></label>
-        <span class="muted small">Net <b class="tnum">${Math.round(draft.volume * capy.ratios[draft.type])} ml</b></span></div>
+        <span class="muted small">Net <b class="tnum">${Math.round(draft.volume * (capy.ratios[draft.type] ?? 1))} ml</b></span></div>
       <div class="row-btns"><button class="btn danger-text" onClick=${() => { onDone(); capy.remove(log.id) }}>Delete</button><span class="right"></span>
         <button class="btn" onClick=${onDone}>Cancel</button>
         <button class="btn primary cs-go" onClick=${() => { capy.change(log.id, { type: draft.type, volume: draft.volume, ts: tsFromHHMM(draft.time, dateOf(log.ts)), name: draft.type === log.type ? log.name : undefined }); onDone() }}>Save</button></div>
@@ -186,7 +238,7 @@ function LogRow({ log, capy, editing, onEdit, onDone }) {
   </div>`
 }
 
-function HydrationCalculator({ capy }) {
+function HydrationCalculator({ capy, onEditDrink, onNewDrink }) {
   const custom = TYPE_ORDER.some(t => capy.ratios[t] !== DEFAULT_RATIOS[t])
   const step = (t, d) => capy.setRatio(t, Math.round(clamp(capy.ratios[t] + d, RATIO_MIN, RATIO_MAX) * 100) / 100)
   return html`<section class="card">
@@ -195,17 +247,20 @@ function HydrationCalculator({ capy }) {
     <div class="cs-goal-row"><span class="row-main"><span>Daily goal</span><small>Steps of 100 ml</small></span>
       <div class="cs-ratio"><button class="circle-btn" aria-label="Lower daily goal" disabled=${capy.goal <= GOAL_MIN} onClick=${() => capy.setGoal(capy.goal - 100)}>−</button>
         <b class="tnum">${fmtMl(capy.goal)} ml</b><button class="circle-btn" aria-label="Raise daily goal" disabled=${capy.goal >= GOAL_MAX} onClick=${() => capy.setGoal(capy.goal + 100)}>+</button></div></div>
-    ${TYPE_ORDER.map(t => { const r = capy.ratios[t], b = BEVERAGES[t]; return html`<div class="cs-ratio-row"><${BevBadge} type=${t} small />
-      <span class="row-main"><span>${b.label}</span><small>${r === DEFAULT_RATIOS[t] ? b.note : `Custom ratio. 250 ml counts as ${Math.round(250 * r)} ml.`}</small></span>
+    ${capy.types.map(t => { const r = capy.ratios[t] ?? 1, b = capy.bev(t); return html`<div class="cs-ratio-row"><${BevBadge} type=${t} small capy=${capy} />
+      <span class="row-main"><span>${b.label}${b.custom && html` <button class="text-btn cs-drink-edit" aria-label=${`Edit ${b.label}`} onClick=${() => onEditDrink(t)}>Edit</button>`}</span>
+        <small>${b.custom ? `Your own drink. 250 ml counts as ${Math.round(250 * r)} ml.` : r === DEFAULT_RATIOS[t] ? b.note : `Custom ratio. 250 ml counts as ${Math.round(250 * r)} ml.`}</small></span>
       <div class="cs-ratio"><button class="circle-btn" aria-label=${`Lower ${b.label} ratio`} disabled=${r <= RATIO_MIN} onClick=${() => step(t, -0.05)}>−</button>
-        <b class=${'tnum' + (r === DEFAULT_RATIOS[t] ? '' : ' cs-custom')}>×${r.toFixed(2)}</b>
+        <b class=${'tnum' + (b.custom || r === DEFAULT_RATIOS[t] ? '' : ' cs-custom')}>×${r.toFixed(2)}</b>
         <button class="circle-btn" aria-label=${`Raise ${b.label} ratio`} disabled=${r >= RATIO_MAX} onClick=${() => step(t, 0.05)}>+</button></div></div>` })}
-    <p class="field-hint">Defaults follow the Beverage Hydration Index (Maughan et al., 2016) and a coffee trial by Killer et al. (2014): at everyday intake these drinks hydrate like water. Change a ratio only if your doctor advises it. Changes apply to every day's drinks.</p>
+    <button class="btn cs-new-drink" onClick=${onNewDrink}><${Icon} name="plus" size=${18} /> Add your own drink</button>
+    <p class="field-hint">Defaults follow the Beverage Hydration Index (Maughan et al., 2016) and a coffee trial by Killer et al. (2014): at everyday intake these drinks hydrate like water. Change a ratio only if your doctor advises it. Your own drinks start at ×1.00, which is a guess, not a measured value. Changes apply to every day's drinks.</p>
   </section>`
 }
 
 function LogPanel({ capy, onCustom }) {
   const [editing, setEditing] = useState(null)
+  const [drinkEdit, setDrinkEdit] = useState(null) // null, 'new' or a drink id
   const sorted = [...capy.logs].sort((a, b) => b.ts - a.ts)
   const vol = capy.logs.reduce((n, l) => n + l.volume, 0)
   return html`<div class="stack">
@@ -215,7 +270,10 @@ function LogPanel({ capy, onCustom }) {
     ${sorted.length ? html`<p class="muted small">Swipe a drink right to edit, left to delete.</p>
       <div class="stack cs-logs">${sorted.map(l => html`<${LogRow} key=${l.id} log=${l} capy=${capy} editing=${editing === l.id} onEdit=${() => setEditing(l.id)} onDone=${() => setEditing(null)} />`)}</div>`
       : html`<div class="card empty"><span class="cs-emoji big">🫙</span><p class="empty-title">No sips yet today</p><p class="empty-body">Capy's bath is running dry. Log your first drink.</p></div>`}
-    <${HydrationCalculator} capy=${capy} />
+    <${HydrationCalculator} capy=${capy} onEditDrink=${setDrinkEdit} onNewDrink=${() => setDrinkEdit('new')} />
+    <${Sheet} open=${!!drinkEdit} title=${drinkEdit === 'new' ? 'New drink' : 'Edit drink'} onClose=${() => setDrinkEdit(null)}>
+      ${drinkEdit && html`<${DrinkForm} key=${drinkEdit} drink=${drinkEdit === 'new' ? null : capy.drinkOf(drinkEdit)} capy=${capy} onSaved=${() => setDrinkEdit(null)} onCancel=${() => setDrinkEdit(null)} />`}
+    </${Sheet}>
   </div>`
 }
 

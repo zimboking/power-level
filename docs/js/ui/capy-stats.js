@@ -2,7 +2,7 @@
 // All from your own logs; the mood insight unlocks only once there's enough of them.
 import { html, useState, useEffect, Segmented } from './core.js'
 import {
-  BEVERAGES, TYPE_ORDER, MOODS, MOOD_ORDER, PERIODS, INSIGHT_MIN_DAYS, INSIGHT_MIN_PER_GROUP,
+  TYPE_ORDER, bevClass, MOODS, MOOD_ORDER, PERIODS, INSIGHT_MIN_DAYS, INSIGHT_MIN_PER_GROUP,
   hourly, periodTotals, periodOf, weekSeries, breakdown, moodInsight, pctOf, clamp,
 } from '../water.js'
 import { addDays } from '../schedule.js'
@@ -88,11 +88,12 @@ function WeeklyChart({ app, capy }) {
 function Breakdown({ capy }) {
   const totals = breakdown(capy.logs)
   const sum = Object.values(totals).reduce((s, v) => s + v, 0)
+  const types = [...TYPE_ORDER, ...Object.keys(totals).filter(t => !TYPE_ORDER.includes(t))]
   return html`<section class="card">
     <div class="card-head"><p class="card-title">Drink mix</p><span class="muted small">share of today's volume</span></div>
     ${sum === 0 ? html`<p class="muted small">Log a drink to see your mix.</p> ` : html`
-      <div class="cs-mix">${TYPE_ORDER.filter(t => totals[t] > 0).map(t => html`<span class=${'bev-' + t} style=${{ width: (totals[t] / sum) * 100 + '%' }} title=${`${BEVERAGES[t].category}: ${totals[t]} ml`}></span>`)}</div>
-      ${TYPE_ORDER.map(t => html`<div class="cs-mix-row"><span><i class=${'cs-key bev-' + t}></i>${BEVERAGES[t].emoji} ${BEVERAGES[t].category}</span>
+      <div class="cs-mix">${types.filter(t => totals[t] > 0).map(t => html`<span class=${bevClass(t)} style=${{ width: (totals[t] / sum) * 100 + '%' }} title=${`${capy.bev(t).category}: ${totals[t]} ml`}></span>`)}</div>
+      ${types.map(t => html`<div class="cs-mix-row"><span><i class=${'cs-key ' + bevClass(t)}></i>${capy.bev(t).emoji} ${capy.bev(t).category}</span>
         <span class="muted"><b>${Math.round((totals[t] / sum) * 100)}%</b> · ${fmtMl(totals[t])} ml</span></div>`)}`}
   </section>`
 }

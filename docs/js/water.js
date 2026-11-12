@@ -56,11 +56,50 @@ export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 export const pctOf = (total, goal) => Math.floor((total * 100) / goal)
 export const stageFor = pct => (pct >= 76 ? 3 : pct >= 51 ? 2 : pct >= 26 ? 1 : 0)
 export const periodOf = h => (h >= 5 && h < 12 ? 'morning' : h >= 12 && h < 17 ? 'afternoon' : 'evening')
-export const drinkName = log => log.name || BEVERAGES[log.type]?.label || 'Drink'
+export const drinkName = (log, bevs = BEVERAGES) => log.name || bevs[log.type]?.label || 'Drink'
 
 /** Is CapySpa switched on? On unless the person turned it off. */
 export const capyOn = settings => settings?.capyspa !== false
-export const ratiosOf = settings => ({ ...DEFAULT_RATIOS, ...(settings?.capyRatios || {}) })
+
+// Your own drinks: profile.settings.capyDrinks = [{ id: 'c:<uid>', label, emoji, ratio, hidden? }].
+// A deleted drink stays as hidden so its old logs keep their name, emoji and ratio.
+export const CUSTOM_EMOJI = ['🥤', '🥛', '🧋', '🍹', '🥥', '🍋', '🍺', '🍷', '🫖', '🍶', '🧉', '⚡']
+export const DRINK_NAME_MAX = 24
+export const isCustomType = type => String(type).startsWith('c:')
+export const customDrinks = settings => (Array.isArray(settings?.capyDrinks) ? settings.capyDrinks : []).filter(d => d && isCustomType(d.id) && d.label)
+const cleanRatio = r => (Number.isFinite(Number(r)) ? Math.round(clamp(Number(r), RATIO_MIN, RATIO_MAX) * 100) / 100 : 1)
+
+/** A tidy custom drink, or null when it has no name. */
+export function makeDrink(id, { label, emoji, ratio } = {}) {
+  const name = String(label || '').replace(/\s+/g, ' ').trim().slice(0, DRINK_NAME_MAX)
+  if (!name) return null
+  return { id, label: name, emoji: CUSTOM_EMOJI.includes(emoji) ? emoji : CUSTOM_EMOJI[0], ratio: cleanRatio(ratio) }
+}
+/** Add or change a drink in the list (matched by id). Names must be unique among shown drinks. */
+export function saveDrink(list, drink) {
+  const rest = (list || []).filter(d => d.id !== drink.id)
+  const clash = [...Object.values(BEVERAGES), ...rest.filter(d => !d.hidden)].some(d => d.label.toLowerCase() === drink.label.toLowerCase())
+  if (clash) return { list: list || [], error: 'You already have a drink with that name.' }
+  const at = (list || []).findIndex(d => d.id === drink.id)
+  return { list: at < 0 ? [...rest, drink] : (list || []).map(d => (d.id === drink.id ? drink : d)), error: null }
+}
+export const hideDrink = (list, id) => (list || []).map(d => (d.id === id ? { ...d, hidden: true } : d))
+
+/** Built-in drinks plus your own (hidden ones included, so old logs still show properly). */
+export function beveragesOf(settings) {
+  const mine = Object.fromEntries(customDrinks(settings).map(d => [d.id, { label: d.label, category: d.label, emoji: d.emoji || CUSTOM_EMOJI[0], note: 'Your own drink.', custom: true, hidden: !!d.hidden }]))
+  return { ...BEVERAGES, ...mine }
+}
+export const typeOrderOf = settings => [...TYPE_ORDER, ...customDrinks(settings).filter(d => !d.hidden).map(d => d.id)]
+/** Details for any drink type, even one that no longer exists. */
+export const bevOf = (bevs, type) => bevs[type] || { label: 'Drink', category: 'Other', emoji: '🥤', note: '', custom: true, hidden: true }
+export const bevClass = type => 'bev-' + (BEVERAGES[type] ? type : 'custom')
+
+export const ratiosOf = settings => ({
+  ...DEFAULT_RATIOS,
+  ...Object.fromEntries(customDrinks(settings).map(d => [d.id, cleanRatio(d.ratio)])),
+  ...(settings?.capyRatios || {}),
+})
 export const goalOf = settings => clamp(Math.round(settings?.waterGoal || WATER_GOAL), GOAL_MIN, GOAL_MAX)
 
 export const netOf = (log, ratios) => Math.round(log.volume * (ratios[log.type] ?? 1))
@@ -167,7 +206,7 @@ export function weekSeries(water, ratios, todayIso, weeksBack = 0) {
   })
 }
 
-/** Volume per drink type. */
+/** Volume per drink type (built-in types always listed, others when logged). */
 export function breakdown(logs) {
   const t = Object.fromEntries(TYPE_ORDER.map(k => [k, 0]))
   logs.forEach(l => { t[l.type] = (t[l.type] || 0) + l.volume })

@@ -647,7 +647,7 @@ details summary { cursor: pointer; }
 .cs-quick-btn.custom { --bev: var(--cs-gold); }
 .capy-tab .toast { bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 112px); } /* clear of the quick-add bar */
 .cs-plus { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--cs-gold); color: #1c1917; }
-.bev-water { --bev: var(--cs-water); } .bev-tea { --bev: var(--cs-tea); } .bev-coffee { --bev: var(--cs-coffee); } .bev-juice { --bev: var(--cs-juice); }
+.bev-water { --bev: var(--cs-water); } .bev-tea { --bev: var(--cs-tea); } .bev-coffee { --bev: var(--cs-coffee); } .bev-juice { --bev: var(--cs-juice); } .bev-custom { --bev: var(--cs-evening); }
 .bev-badge { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; flex: none; font-size: 1.3rem; background: color-mix(in srgb, var(--bev) 20%, transparent); }
 .bev-badge.sm { width: 34px; height: 34px; border-radius: 11px; font-size: 1.05rem; }
 .cs-types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
@@ -655,6 +655,11 @@ details summary { cursor: pointer; }
 .sheet .cs-type { background: var(--surface); }
 .cs-type b { font-size: .74rem; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .cs-type small { font-size: .7rem; color: var(--label-2); }
 .cs-type.on { border-color: var(--cs-water); background: color-mix(in srgb, var(--cs-water) 14%, var(--surface-2)); }
+.cs-type-new { border: 2px dashed var(--sep); background: transparent; } .sheet .cs-type-new { background: transparent; }
+.cs-emoji-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.cs-emoji-btn { height: 44px; border-radius: 12px; font-size: 1.35rem; background: var(--surface); border: 2px solid transparent; }
+.cs-emoji-btn.on { border-color: var(--cs-water); background: color-mix(in srgb, var(--cs-water) 14%, var(--surface)); }
+.cs-drink-edit { font-size: .8rem; margin-left: 6px; } .cs-new-drink { width: 100%; margin-top: 4px; }
 .cs-type.mood b { white-space: normal; text-align: center; line-height: 1.15; }
 .cs-type.mood.on { border-color: var(--cs-amber); background: color-mix(in srgb, var(--cs-amber) 14%, var(--surface-2)); }
 .cs-vol { display: flex; flex-direction: column; gap: 10px; }
