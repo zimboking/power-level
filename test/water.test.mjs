@@ -175,5 +175,8 @@ test('your own drinks: tidy names, no duplicates, hidden ones keep their logs re
   assert.equal(w.drinkName({ type: 'c:1' }, w.beveragesOf(hidden)), 'Protein shake')
   assert.equal(w.bevOf(w.beveragesOf({}), 'c:gone').label, 'Drink')
   assert.equal(w.bevClass('c:1'), 'bev-custom')
+  // A hand-edited backup: odd ratios fall back to 1, and a drink without a text name is ignored.
+  assert.deepEqual([w.cleanRatio(null), w.cleanRatio('abc'), w.cleanRatio('0.8')], [1, 1, 0.8])
+  assert.deepEqual(w.customDrinks({ capyDrinks: [{ id: 'c:9', label: 42 }, null, { id: 'c:8', label: 'Milk' }] }).map(d => d.id), ['c:8'])
   assert.equal(w.breakdown([{ type: 'c:1', volume: 200 }])['c:1'], 200)
 })

@@ -66,8 +66,8 @@ export const capyOn = settings => settings?.capyspa !== false
 export const CUSTOM_EMOJI = ['🥤', '🥛', '🧋', '🍹', '🥥', '🍋', '🍺', '🍷', '🫖', '🍶', '🧉', '⚡']
 export const DRINK_NAME_MAX = 24
 export const isCustomType = type => String(type).startsWith('c:')
-export const customDrinks = settings => (Array.isArray(settings?.capyDrinks) ? settings.capyDrinks : []).filter(d => d && isCustomType(d.id) && d.label)
-const cleanRatio = r => (Number.isFinite(Number(r)) ? Math.round(clamp(Number(r), RATIO_MIN, RATIO_MAX) * 100) / 100 : 1)
+export const customDrinks = settings => (Array.isArray(settings?.capyDrinks) ? settings.capyDrinks : []).filter(d => d && isCustomType(d.id) && typeof d.label === 'string' && d.label)
+export const cleanRatio = r => (r != null && r !== '' && Number.isFinite(Number(r)) ? Math.round(clamp(Number(r), RATIO_MIN, RATIO_MAX) * 100) / 100 : 1)
 
 /** A tidy custom drink, or null when it has no name. */
 export function makeDrink(id, { label, emoji, ratio } = {}) {

@@ -56,6 +56,10 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 | `js/superset.js` | After a tick: rest length and which superset partner is next (`afterSet`) |
 | `js/resume.js` | Reopening a finished workout (`resumeSession`, `canResume`) and the finish-early set counts |
 | `js/water.js` | CapySpa water tracker: drink logs per day, hydration ratios, stages, streak, mood insight |
+| `js/progress.js` | Lift series (est. 1RM, top set, volume), body weight against food, monthly recap numbers |
+| `js/ui/recap.js` | Month recap card on Stats and its 1080×1350 share picture |
+| `js/ui/food-week.js` | Food week view: energy by day, daily averages against targets, what's left per day |
+| `js/steps.js`, `js/ui/steps.js` | Steps on Home: `profile.steps[date]`, goal, weekly bars, paste and `#steps=` link import |
 | `js/data/catalog.json`, `body.json` | Generated; see `tools/build-data.mjs` and NOTICE.md |
 | `js/data/foods.json` | Generated from FSANZ AFCD Release 3: `[key, name, kcal, p, c, f, fibre g, sodium mg]` |
 | `js/ui/*.js` | Views: home, plan-tab, workout, exercise-card, set-row, stats-tab, food, library… |
@@ -68,7 +72,7 @@ browser (localStorage, plus IndexedDB for progress photos). Inspired by
 ## Commands
 
 ```bash
-npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs test/rest-load.test.mjs test/social.test.mjs test/resume.test.mjs test/superset.test.mjs
+npm test          # node --test test/logic.test.mjs test/features.test.mjs test/foods.test.mjs test/water.test.mjs test/routines.test.mjs test/dates.test.mjs test/photos.test.mjs test/records.test.mjs test/share.test.mjs test/duration.test.mjs test/reorder.test.mjs test/workout-share.test.mjs test/rest-load.test.mjs test/social.test.mjs test/resume.test.mjs test/superset.test.mjs test/progress.test.mjs test/steps.test.mjs
 npm run build     # node tools/build-site.mjs docs
 git push          # Pages republishes docs/ in ~1 minute
 ```
@@ -103,6 +107,21 @@ Data files (only when the sources change):
   so the centre button stays centred; off, it's the original five tabs. Its colours are `--cs-*`
   tokens (the onsen is daytime in light theme, dusk in dark). The original's Squad tab was
   simulated friends, so it wasn't ported; it needs a backend to be real.
+- **Your own CapySpa drinks** live in `settings.capyDrinks` (`{ id: 'c:<uid>', label, emoji, ratio, hidden? }`).
+  A removed drink is only hidden, so old logs keep their name, picture and ratio. Use `capy.bev(type)`
+  / `bevOf`, never `BEVERAGES[type]`, because a log's type may be a custom or long-gone drink.
+- **Food week view:** `weekSummary` leaves blank past days out, and today counts as still in progress
+  (it's in the budget and the totals, but not in the daily average unless it's the only logged day).
+- **Steps** can't come from Apple Health, Health Connect or Garmin: web apps have no access. The
+  day's total is typed, pasted, or handed over as `#steps=N[&date=YYYY-MM-DD]` (checked like a share
+  link). On iPhone that link opens Safari, not the installed app, so paste is the way there.
+- **Reordering a live workout** goes through `reorder()` in `SessionScreen`, which reads the latest
+  session (like `goTo`) and runs `tidyGroups`, so a superset link only survives between neighbours.
+- **Chime and other apps' sound:** `primeAudio` asks for a `transient` audio session (Safari 16.4+),
+  wakes the context on `statechange` and on the next tap, and `ensureChime` falls back to an `<audio>`
+  element (a WAV from `chimeWav`) when the context won't start. Not verified on a real iPhone.
+- **The maintenance estimate** on Stats → Body uses 7,700 kcal per kg and needs 3 weeks with a weigh-in
+  and 4+ logged food days each. It is labelled as a rough estimate; keep it that way.
 - **Backups without `water`** (made before CapySpa) leave the water log on the device alone.
 - **Progress photos** have their own backup file (`power-level-photos-<date>.json`, kind
   `power-level-photos`); restoring merges by id and never deletes.

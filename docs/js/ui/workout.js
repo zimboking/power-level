@@ -215,7 +215,9 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
     const s = latest.current
     const next = tidyGroups(moveItem(s.entries, from, to))
     const shown = s.entries[Math.min(s.focus || 0, s.entries.length - 1)]?.key
-    onChange({ ...s, entries: next, focus: Math.max(0, next.findIndex(e => e.key === shown)) })
+    const moved = { ...s, entries: next, focus: Math.max(0, next.findIndex(e => e.key === shown)) }
+    latest.current = moved // so a second move before the next render builds on this one
+    onChange(moved)
   }
   const toggleSuperset = i => {
     const cur = entries[i], nxt = entries[i + 1]

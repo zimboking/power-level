@@ -18,7 +18,9 @@ export const stepGoalOf = settings => {
 export function parseSteps(text) {
   const m = /\d[\d,.\s  ]*/.exec(String(text ?? ''))
   if (!m) return null
-  const n = Number(m[0].replace(/[^\d]/g, ''))
+  // "8432.7" from a health app is a decimal, not 84,327: one or two digits after a single dot are dropped.
+  const whole = m[0].trim().replace(/^(\d+)\.\d{1,2}$/, '$1')
+  const n = Number(whole.replace(/[^\d]/g, ''))
   return Number.isFinite(n) && n >= 0 && n <= STEPS_MAX ? n : null
 }
 

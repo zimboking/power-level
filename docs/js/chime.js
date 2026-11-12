@@ -8,7 +8,7 @@ export function primeAudio() {
     mixWithOthers()
     const fresh = !audio
     audio = audio || new (window.AudioContext || window.webkitAudioContext)()
-    if (audio.state !== 'running') audio.resume()
+    if (audio.state !== 'running') audio.resume().catch(() => {})
     if (fresh) watchAudio(audio)
     primeBackup()
   } catch { audio = null }

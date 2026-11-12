@@ -6,7 +6,7 @@ import { OnsenScene, CapyRing } from './onsen.js'
 import { CapyStats } from './capy-stats.js'
 import {
   TYPE_ORDER, QUICK_ADDS, STAGES, DEFAULT_RATIOS, RATIO_MIN, RATIO_MAX, GOAL_MIN, GOAL_MAX,
-  CUSTOM_EMOJI, DRINK_NAME_MAX, beveragesOf, typeOrderOf, bevOf, bevClass, isCustomType, makeDrink, saveDrink, hideDrink,
+  CUSTOM_EMOJI, DRINK_NAME_MAX, beveragesOf, typeOrderOf, bevOf, bevClass, isCustomType, makeDrink, saveDrink, hideDrink, cleanRatio,
   ratiosOf, goalOf, netOf, logsOf, pctOf, stageFor, clamp, drinkName, nextUnlock, streak,
   addLog, removeLog, updateLog, setMood, dateOf, toHHMM, tsFromHHMM,
 } from '../water.js'
@@ -90,7 +90,7 @@ function TypePicker({ value, onChange, capy, onNew }) {
 function DrinkForm({ drink, capy, onSaved, onCancel }) {
   const [label, setLabel] = useState(drink?.label || '')
   const [emoji, setEmoji] = useState(drink?.emoji || CUSTOM_EMOJI[0])
-  const [ratio, setRatio] = useState(drink?.ratio ?? 1)
+  const [ratio, setRatio] = useState(cleanRatio(drink?.ratio))
   const [error, setError] = useState(null)
   const step = d => setRatio(r => Math.round(clamp(r + d, RATIO_MIN, RATIO_MAX) * 100) / 100)
   const submit = e => {
