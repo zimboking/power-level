@@ -411,6 +411,11 @@ textarea.input { resize: vertical; }
 .drag-grip { flex: none; width: 34px; height: 40px; margin-left: -6px; display: grid; place-items: center; color: var(--label-3); touch-action: none; cursor: grab; border-radius: var(--r-sm); }
 .drag-grip .ic { stroke-width: 3.4; }
 .drag-grip:active { cursor: grabbing; color: var(--acc); }
+.session-foot { display: flex; gap: 8px; } .session-foot .wide { flex: 1; }
+.order-row { display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 14px; border-top: 1px solid var(--sep); }
+.order-row:first-child { border-top: 0; } .order-row .row-main { min-width: 0; } .order-row .row-main > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-row.is-dragging { background: var(--surface-2); border-radius: var(--r); border-top-color: transparent; }
+.order-tag { color: var(--acc); font-size: .8rem; }
 .is-dragging { position: relative; z-index: 6; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); transition: none !important; }
 .is-shifting { transition: transform var(--med) var(--ease); }
 .item-row.is-dragging { background: var(--surface-2); }

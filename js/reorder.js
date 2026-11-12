@@ -27,3 +27,15 @@ export function shiftFor(i, from, to, size) {
   if (from > to && i < from && i >= to) return size
   return 0
 }
+
+/**
+ * After a reorder, a superset link only survives between neighbours: an entry keeps its `group`
+ * when the entry right before or after it has the same one.
+ */
+export function tidyGroups(entries) {
+  return entries.map((e, i) => {
+    if (!e.group || entries[i - 1]?.group === e.group || entries[i + 1]?.group === e.group) return e
+    const { group, ...rest } = e
+    return rest
+  })
+}

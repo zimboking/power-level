@@ -25,3 +25,16 @@ test('shiftFor makes room in the right direction', () => {
   assert.deepEqual([0, 1, 2, 3].map(i => shiftFor(i, 0, 2, 100)), [0, -100, -100, 0])
   assert.deepEqual([0, 1, 2, 3].map(i => shiftFor(i, 3, 1, 100)), [0, 100, 100, 0])
 })
+
+test('tidyGroups: a superset link survives only between neighbours', async () => {
+  const { tidyGroups, moveItem } = await import('../js/reorder.js')
+  const list = [{ k: 'a', group: 'g1' }, { k: 'b', group: 'g1' }, { k: 'c' }, { k: 'd', group: 'g2' }, { k: 'e', group: 'g2' }, { k: 'f', group: 'g2' }]
+  assert.deepEqual(tidyGroups(list), list)
+  // Dragging "a" below "c" splits the pair.
+  assert.deepEqual(tidyGroups(moveItem(list, 0, 2)).slice(0, 3), [{ k: 'b' }, { k: 'c' }, { k: 'a' }])
+  // Moving the middle of three away keeps the other two linked only if they are now neighbours.
+  const moved = tidyGroups(moveItem(list, 4, 0))
+  assert.deepEqual(moved.map(e => e.group || null), [null, 'g1', 'g1', null, 'g2', 'g2'])
+  // Swapping inside a group keeps it.
+  assert.deepEqual(tidyGroups(moveItem(list, 0, 1)).map(e => e.k + (e.group || '')), ['bg1', 'ag1', 'c', 'dg2', 'eg2', 'fg2'])
+})

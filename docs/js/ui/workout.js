@@ -6,6 +6,8 @@ import { LibrarySheet } from './library.js'
 import { RoutineEditor } from './plan-tab.js'
 import { groupRoutines, saveRoutine as storeRoutine } from '../routines.js'
 import { afterSet } from '../superset.js'
+import { moveItem, tidyGroups } from '../reorder.js'
+import { useDragSort, Grip } from './drag.js'
 import { buildEntry, DEFAULT_CFG, entriesFor, startCfg } from '../plan.js'
 import { recordsBroken } from '../records.js'
 import { fmtDuration, fmtDistance } from '../duration.js'
@@ -163,6 +165,26 @@ function Elapsed({ since }) {
   return html`<span class="tnum">${fmtClock(Math.max(0, Math.floor((now - since) / 1000)))}</span>`
 }
 
+/** Every exercise in the session as a short row: drag the grip, or use the arrows. */
+function OrderSheet({ open, onClose, entries, labels, onMove }) {
+  const drag = useDragSort(onMove)
+  return html`<${Sheet} open=${open} title="Reorder exercises" onClose=${onClose}>
+    <p class="muted small">Hold the grip and slide an exercise to where you want it. Supersets stay linked while their exercises stay next to each other.</p>
+    <div class=${'group order-list' + (drag.dragging ? ' drag-on' : '')}>${entries.map((e, i) => {
+      const ip = drag.itemProps(i)
+      const w = e.sets.filter(s => !s.warmup), d = w.filter(s => s.done).length
+      const name = exInfo(e.exId).name
+      return html`<div key=${e.key} class=${'order-row' + ip.class} ref=${ip.ref} style=${ip.style}>
+        <${Grip} props=${drag.gripProps(i, 'Drag to move ' + name)} />
+        <span class="row-main"><span>${labels[e.key] ? html`<b class="order-tag">${labels[e.key]}</b> ` : ''}${name}</span><small>${d} of ${w.length} sets done</small></span>
+        <button class="icon-btn" aria-label=${'Move ' + name + ' up'} disabled=${i === 0} onClick=${() => onMove(i, i - 1)}><${Icon} name="up" size=${18} /></button>
+        <button class="icon-btn" aria-label=${'Move ' + name + ' down'} disabled=${i === entries.length - 1} onClick=${() => onMove(i, i + 1)}><${Icon} name="down" size=${18} /></button>
+      </div>`
+    })}</div>
+    <button class="btn primary" onClick=${onClose}>Done</button>
+  </${Sheet}>`
+}
+
 export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onClose }) {
   const { workouts, profile } = app.state
   const view = profile.settings.view === 'list' ? 'list' : 'focus'
@@ -171,6 +193,7 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
   const [demoMin, setDemoMin] = useState(false)
   const [rename, setRename] = useState(false)
   const [confirmFinish, setConfirmFinish] = useState(false)
+  const [ordering, setOrdering] = useState(false)
   const entries = session.entries
   const focus = Math.min(session.focus || 0, Math.max(0, entries.length - 1))
   const labels = supersetLabels(entries)
@@ -186,6 +209,13 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
     if (j < 0 || j >= entries.length) return
     const next = [...entries];[next[i], next[j]] = [next[j], next[i]]
     setEntries(next, { focus: j })
+  }
+  // Drag or arrows in the reorder sheet. The exercise on screen stays the one on screen.
+  const reorder = (from, to) => {
+    const s = latest.current
+    const next = tidyGroups(moveItem(s.entries, from, to))
+    const shown = s.entries[Math.min(s.focus || 0, s.entries.length - 1)]?.key
+    onChange({ ...s, entries: next, focus: Math.max(0, next.findIndex(e => e.key === shown)) })
   }
   const toggleSuperset = i => {
     const cur = entries[i], nxt = entries[i + 1]
@@ -251,7 +281,9 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
         ${focus < entries.length - 1 ? html`<button class="btn primary" onClick=${() => goTo(focus + 1)}>Next <${Icon} name="right" size=${18} /></button>` : html`<button class="btn primary" onClick=${finish}>${session.editing ? 'Save' : 'Finish'} <${Icon} name="check" size=${18} /></button>`}
       </div>`}
     ${view === 'list' && entries.map(card)}
-    <button class="btn wide" onClick=${() => setPicker({})}><${Icon} name="plus" size=${18} /> Add exercise</button>
+    <div class="session-foot"><button class="btn wide" onClick=${() => setPicker({})}><${Icon} name="plus" size=${18} /> Add exercise</button>
+      ${entries.length > 1 && html`<button class="btn" onClick=${() => setOrdering(true)}><${Icon} name="grip" size=${18} /> Reorder</button>`}</div>
+    <${OrderSheet} open=${ordering} onClose=${() => setOrdering(false)} entries=${entries} labels=${labels} onMove=${reorder} />
 
     <${Sheet} open=${confirmFinish} title="Finish workout?" onClose=${() => setConfirmFinish(false)}>
       <p>${done === 0 ? html`No sets are ticked yet, so <b>nothing would be saved</b>.` : html`You’ve ticked <b>${done} of ${total}</b> sets. The ${total - done} unticked ${total - done === 1 ? 'set isn’t' : 'sets aren’t'} saved.`}</p>
@@ -261,6 +293,7 @@ export function SessionScreen({ app, session, onChange, onFinish, onDiscard, onC
     </${Sheet}>
     <${ActionSheet} open=${menu} title=${session.name} onClose=${() => setMenu(false)} actions=${[
       { label: 'Add exercise', icon: 'plus', onClick: () => setPicker({}) },
+      entries.length > 1 && { label: 'Reorder exercises', icon: 'grip', hint: 'Drag them into the order you want', onClick: () => setOrdering(true) },
       { label: view === 'focus' ? 'Show as list' : 'Guided view', icon: 'list', hint: 'Change the default in Settings', onClick: () => app.setSetting({ view: view === 'focus' ? 'list' : 'focus' }) },
       !session.editing && { label: 'Rest timer', icon: 'timer', onClick: () => app.startRest(profile.settings.rest || 150) },
       { label: 'Rename', icon: 'edit', onClick: () => setRename(true) },
